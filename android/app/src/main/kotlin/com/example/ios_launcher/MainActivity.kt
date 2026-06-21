@@ -12,6 +12,11 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
+import android.app.role.RoleManager
+import android.content.Context
+import android.os.Build
+import android.provider.Settings
+import android.net.Uri
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.ios_launcher/apps"
@@ -36,6 +41,13 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error("INVALID_ARGS", "Package name is null", null)
                     }
+                }
+                "isDefaultLauncher" -> {
+                    result.success(isDefaultLauncher())
+                }
+                "openDefaultLauncherSettings" -> {
+                    openDefaultLauncherSettings()
+                    result.success(true)
                 }
                 else -> {
                     result.notImplemented()
@@ -74,6 +86,65 @@ class MainActivity : FlutterActivity() {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         if (launchIntent != null) {
             startActivity(launchIntent)
+        }
+    }
+
+    private fun isDefaultLauncher(): Boolean {
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        val currentDefaultPackage = resolveInfo?.activityInfo?.packageName
+        return currentDefaultPackage == packageName
+    }
+
+    private val REQUEST_CODE_HOME_ROLE = 1001
+
+    private fun openDefaultLauncherSettings() {
+        android.util.Log.d("ios_launcher", "openDefaultLauncherSettings called, SDK: ${Build.VERSION.SDK_INT}")
+
+        // Phương án 1: RoleManager (Android 10+) — BẮT BUỘC dùng startActivityForResult
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val roleManager = getSystemService(Context.ROLE_SERVICE) as? RoleManager
+                if (roleManager != null && roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)
+                    startActivityForResult(intent, REQUEST_CODE_HOME_ROLE)
+                    android.util.Log.d("ios_launcher", "RoleManager dialog launched via startActivityForResult")
+                    return
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ios_launcher", "RoleManager failed: ${e.message}", e)
+            }
+        }
+
+        // Phương án 2: Mở Settings.ACTION_HOME_SETTINGS
+        try {
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            android.util.Log.d("ios_launcher", "ACTION_HOME_SETTINGS opened")
+            return
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "ACTION_HOME_SETTINGS failed: ${e.message}", e)
+        }
+
+        // Phương án 3: Mở Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS
+        try {
+            startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+            android.util.Log.d("ios_launcher", "ACTION_MANAGE_DEFAULT_APPS_SETTINGS opened")
+            return
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "ACTION_MANAGE_DEFAULT_APPS_SETTINGS failed: ${e.message}", e)
+        }
+
+        // Phương án 4: Mở trang App Info của ứng dụng
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+            android.util.Log.d("ios_launcher", "ACTION_APPLICATION_DETAILS_SETTINGS opened")
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "All methods failed: ${e.message}", e)
         }
     }
 

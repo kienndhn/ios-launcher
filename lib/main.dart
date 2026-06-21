@@ -5,6 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const IOSLauncherApp());
 }
 
@@ -78,6 +85,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _padGridApps();
         isLoading = false;
       });
+
+      // Kiểm tra trạng thái mặc định của launcher sau khi tải ứng dụng xong
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkDefaultLauncher();
+      });
     } on PlatformException catch (e) {
       print("Failed to get apps: '${e.message}'.");
       setState(() {
@@ -85,6 +97,140 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
   }
+
+  Future<void> _checkDefaultLauncher() async {
+    try {
+      final bool isDefault = await platform.invokeMethod('isDefaultLauncher');
+      if (!isDefault && mounted) {
+        _showDefaultLauncherDialog();
+      }
+    } on PlatformException catch (e) {
+      print("Failed to check default launcher: '${e.message}'.");
+    }
+  }
+
+  void _showDefaultLauncherDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.65),
+      builder: (BuildContext context) {
+        return Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Material(
+                type: MaterialType.transparency,
+                child: Container(
+                  width: 270,
+                  padding: const EdgeInsets.only(top: 20),
+                  decoration: BoxDecoration(
+                  color: const Color(0xCC1E1E1E), // iOS Dark Alert Background
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.08),
+                    width: 0.5,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Đặt làm Màn hình chính mặc định?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Để sử dụng tất cả các tính năng cử chỉ vuốt, thanh Dock và quản lý ứng dụng, hãy đặt iOS Launcher làm màn hình chính mặc định của bạn.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              height: 1.35,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      height: 0.5,
+                      color: Colors.white.withOpacity(0.15),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text(
+                              'Để sau',
+                              style: TextStyle(
+                                color: Color(0xFF0A84FF),
+                                fontSize: 17,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 0.5,
+                          height: 44,
+                          color: Colors.white.withOpacity(0.15),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () async {
+                              Navigator.of(context).pop();
+                              try {
+                                await platform.invokeMethod('openDefaultLauncherSettings');
+                              } on PlatformException catch (e) {
+                                print("Failed to open launcher settings: '${e.message}'.");
+                              }
+                            },
+                            child: const Text(
+                              'Thiết lập',
+                              style: TextStyle(
+                                color: Color(0xFF0A84FF),
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
 
   void _padGridApps() {
     int remainder = gridApps.length % 24;
