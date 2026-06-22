@@ -41,7 +41,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver, TickerProviderStateMixin {
   static const platform = MethodChannel('com.example.ios_launcher/apps');
   
   // Configurable hold delays
@@ -61,16 +61,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isEditingMode = false;
   bool _isContextMenuOpen = false;
 
+  AppInfo? _launchingApp;
+  Offset? _launchStartBounds;
+  Size? _launchStartSize;
+  late AnimationController _launchAnimationController;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadApps();
+    _launchAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _launchAnimationController.dispose();
     super.dispose();
   }
 
@@ -78,6 +88,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _loadApps();
+      if (_launchingApp != null) {
+        setState(() {
+          _launchingApp = null;
+          _launchAnimationController.reset();
+        });
+      }
+    } else if (state == AppLifecycleState.paused) {
+      if (_launchingApp != null) {
+        setState(() {
+          _launchingApp = null;
+          _launchAnimationController.reset();
+        });
+      }
     }
   }
 
@@ -86,16 +109,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final List<dynamic> result = await platform.invokeMethod(
         'getInstalledApps',
       );
-      setState(() {
-        final List<AppInfo> loaded = result.map((app) {
-          final map = app as Map<dynamic, dynamic>;
-          return AppInfo(
-            packageName: map['packageName'] as String,
-            label: map['label'] as String,
-            icon: map['icon'] as Uint8List,
-          );
-        }).toList();
+      final List<AppInfo> loaded = result.map((app) {
+        final map = app as Map<dynamic, dynamic>;
+        return AppInfo(
+          packageName: map['packageName'] as String,
+          label: map['label'] as String,
+          icon: map['icon'] as Uint8List,
+        );
+      }).toList();
 
+      if (!isLoading) {
+        final newPackages = loaded.map((app) => app.packageName).toSet();
+        final oldPackages = <String>{};
+        for (final app in dockApps) {
+          oldPackages.add(app.packageName);
+        }
+        for (final app in gridApps) {
+          if (app != null) {
+            oldPackages.add(app.packageName);
+          }
+        }
+
+        if (newPackages.length == oldPackages.length &&
+            newPackages.containsAll(oldPackages)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkDefaultLauncher();
+          });
+          return;
+        }
+      }
+
+      setState(() {
         if (loaded.length >= 4) {
           dockApps = loaded.sublist(0, 4);
           gridApps = List<AppInfo?>.from(loaded.sublist(4));
@@ -619,12 +663,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _launchApp(String packageName) async {
+  Future<bool> _launchApp(String packageName) async {
     try {
-      await platform.invokeMethod('launchApp', {'packageName': packageName});
+      final bool success = await platform.invokeMethod('launchApp', {'packageName': packageName});
+      return success;
     } on PlatformException catch (e) {
       print("Failed to launch app: '${e.message}'.");
+      return false;
     }
+  }
+
+  void _animateAppLaunch(AppInfo app, Offset position, Size size) {
+    if (_launchingApp != null) return;
+    setState(() {
+      _launchingApp = app;
+      _launchStartBounds = position;
+      _launchStartSize = size;
+    });
+    _launchAnimationController.forward().then((_) async {
+      // Start a fallback safety timeout of 1.5 seconds.
+      // If the launcher is still in foreground after 1.5s and has not been reset, reset the launch state.
+      final currentLaunchingApp = _launchingApp;
+      Timer(const Duration(milliseconds: 1500), () {
+        if (mounted && _launchingApp == currentLaunchingApp) {
+          setState(() {
+            _launchingApp = null;
+            _launchAnimationController.reset();
+          });
+        }
+      });
+
+      final success = await _launchApp(app.packageName);
+      if (!success && mounted) {
+        setState(() {
+          _launchingApp = null;
+          _launchAnimationController.reset();
+        });
+      }
+    });
   }
 
   void _handleDrop(AppDragInfo dragInfo, int targetGlobalIndex) {
@@ -654,130 +730,209 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           children: [
             // Background Wallpaper
             Positioned.fill(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1D2671), Color(0xFFC33764)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
+              child: AnimatedBuilder(
+                animation: _launchAnimationController,
+                builder: (context, child) {
+                  final t = _launchAnimationController.value;
+                  final curve = Curves.easeOutCubic.transform(t);
+                  final scale = 1.0 - 0.05 * curve;
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF1D2671), Color(0xFFC33764)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
 
             // Main content
             SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Listener(
-                      onPointerMove: _handlePointerMove,
-                      child: isLoading
-                          ? const Center(
-                              child: CircularProgressIndicator(color: Colors.white),
-                            )
-                          : AppGrid(
-                              gridApps: gridApps,
-                              pageController: _pageController,
-                              activeDragInfo: _activeDragInfo,
-                              hoveredGlobalIndex: _hoveredGlobalIndex,
-                              isEditingMode: _isEditingMode,
-                              isContextMenuOpen: _isContextMenuOpen,
-                              dragDelay: dragDelay,
-                              popupDelay: popupDelay,
-                              onPageChanged: (index) {
-                                setState(() {
-                                  _currentPage = index;
-                                });
-                              },
-                              onAppTap: _launchApp,
-                              onDragStarted: (dragInfo) {
-                                setState(() {
-                                  _isGlobalDragging = true;
-                                  _activeDragInfo = dragInfo;
-                                });
-                              },
-                              onDragEnded: () {
-                                setState(() {
-                                  _isGlobalDragging = false;
-                                  _activeDragInfo = null;
-                                  _hoveredGlobalIndex = null;
-                                  _cleanUpTrailingEmptyPages();
-                                });
-                                _pageTurnTimer?.cancel();
-                              },
-                              onHoverChanged: (targetGlobalIndex) {
-                                if (targetGlobalIndex == null || _activeDragInfo == null) {
-                                  setState(() {
-                                    _hoveredGlobalIndex = null;
-                                  });
-                                  return;
-                                }
-                                
-                                final sourceGlobalIndex = _activeDragInfo!.globalIndex;
-                                if (sourceGlobalIndex != targetGlobalIndex) {
-                                  setState(() {
-                                    // Perform reordering shift
-                                    final app = gridApps.removeAt(sourceGlobalIndex);
-                                    gridApps.insert(targetGlobalIndex, app);
-                                    
-                                    // Update index of active dragging app
-                                    _activeDragInfo = AppDragInfo(
-                                      globalIndex: targetGlobalIndex,
-                                      app: _activeDragInfo!.app,
-                                    );
-                                    _hoveredGlobalIndex = targetGlobalIndex;
-                                  });
-                                } else {
-                                  setState(() {
-                                    _hoveredGlobalIndex = targetGlobalIndex;
-                                  });
-                                }
-                              },
-                              onDrop: _handleDrop,
-                              onAppLongPress: _showAppContextMenu,
-                              onAppDeleteTap: _showDeleteConfirmation,
-                            ),
+              child: AnimatedBuilder(
+                animation: _launchAnimationController,
+                builder: (context, child) {
+                  final t = _launchAnimationController.value;
+                  final curve = Curves.easeOutCubic.transform(t);
+                  final opacity = 1.0 - curve;
+                  final scale = 1.0 - 0.03 * curve;
+                  return Opacity(
+                    opacity: opacity,
+                    child: Transform.scale(
+                      scale: scale,
+                      child: child,
                     ),
-                  ),
+                  );
+                },
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Listener(
+                        onPointerMove: _handlePointerMove,
+                        child: isLoading
+                            ? const Center(
+                                child: CircularProgressIndicator(color: Colors.white),
+                              )
+                            : AppGrid(
+                                gridApps: gridApps,
+                                pageController: _pageController,
+                                activeDragInfo: _activeDragInfo,
+                                hoveredGlobalIndex: _hoveredGlobalIndex,
+                                isEditingMode: _isEditingMode,
+                                isContextMenuOpen: _isContextMenuOpen,
+                                dragDelay: dragDelay,
+                                popupDelay: popupDelay,
+                                onPageChanged: (index) {
+                                  setState(() {
+                                    _currentPage = index;
+                                  });
+                                },
+                                onAppTap: _animateAppLaunch,
+                                onDragStarted: (dragInfo) {
+                                  setState(() {
+                                    _isGlobalDragging = true;
+                                    _activeDragInfo = dragInfo;
+                                  });
+                                },
+                                onDragEnded: () {
+                                  setState(() {
+                                    _isGlobalDragging = false;
+                                    _activeDragInfo = null;
+                                    _hoveredGlobalIndex = null;
+                                    _cleanUpTrailingEmptyPages();
+                                  });
+                                  _pageTurnTimer?.cancel();
+                                },
+                                onHoverChanged: (targetGlobalIndex) {
+                                  if (targetGlobalIndex == null || _activeDragInfo == null) {
+                                    setState(() {
+                                      _hoveredGlobalIndex = null;
+                                    });
+                                    return;
+                                  }
+                                  
+                                  final sourceGlobalIndex = _activeDragInfo!.globalIndex;
+                                  if (sourceGlobalIndex != targetGlobalIndex) {
+                                    setState(() {
+                                      // Perform reordering shift
+                                      final app = gridApps.removeAt(sourceGlobalIndex);
+                                      gridApps.insert(targetGlobalIndex, app);
+                                      
+                                      // Update index of active dragging app
+                                      _activeDragInfo = AppDragInfo(
+                                        globalIndex: targetGlobalIndex,
+                                        app: _activeDragInfo!.app,
+                                      );
+                                      _hoveredGlobalIndex = targetGlobalIndex;
+                                    });
+                                  } else {
+                                    setState(() {
+                                      _hoveredGlobalIndex = targetGlobalIndex;
+                                    });
+                                  }
+                                },
+                                onDrop: _handleDrop,
+                                onAppLongPress: _showAppContextMenu,
+                                onAppDeleteTap: _showDeleteConfirmation,
+                              ),
+                      ),
+                    ),
 
-                  // Paging indicators
-                  if (!isLoading)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        totalPages,
-                        (index) => Container(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 16,
+                    // Paging indicators
+                    if (!isLoading)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          totalPages,
+                          (index) => Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 16,
+                            ),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index == _currentPage
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
+                            ),
                           ),
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: index == _currentPage
-                                ? Colors.white
-                                : Colors.white.withOpacity(0.4),
+                        ),
+                      ),
+
+                    // Dock
+                    if (!isLoading && dockApps.isNotEmpty)
+                      Dock(
+                        apps: dockApps,
+                        onAppTap: _animateAppLaunch,
+                        isEditingMode: _isEditingMode,
+                        popupDelay: popupDelay,
+                        onAppLongPress: _showAppContextMenu,
+                        onAppDeleteTap: _showDeleteConfirmation,
+                      ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+
+            if (_launchingApp != null)
+              AnimatedBuilder(
+                animation: _launchAnimationController,
+                builder: (context, child) {
+                  final t = _launchAnimationController.value;
+                  final curve = Curves.easeInOutCubic.transform(t);
+                  
+                  final screenWidth = MediaQuery.of(context).size.width;
+                  final screenHeight = MediaQuery.of(context).size.height;
+                  
+                  final width = lerpDouble(_launchStartSize!.width, screenWidth, curve)!;
+                  final height = lerpDouble(_launchStartSize!.height, screenHeight, curve)!;
+                  final left = lerpDouble(_launchStartBounds!.dx, 0.0, curve)!;
+                  final top = lerpDouble(_launchStartBounds!.dy, 0.0, curve)!;
+                  final borderRadius = lerpDouble(14.0, 0.0, curve)!;
+                  
+                  return Positioned(
+                    left: left,
+                    top: top,
+                    width: width,
+                    height: height,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Color.lerp(
+                            Colors.transparent,
+                            const Color(0xFF1C1C1E),
+                            curve,
+                          ),
+                          borderRadius: BorderRadius.circular(borderRadius),
+                        ),
+                        child: Center(
+                          child: SizedBox(
+                            width: 60 * lerpDouble(1.0, 2.0, curve)!,
+                            height: 60 * lerpDouble(1.0, 2.0, curve)!,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14 * lerpDouble(1.0, 2.0, curve)!),
+                              child: _launchingApp!.icon.isNotEmpty
+                                  ? Image.memory(
+                                      _launchingApp!.icon,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : const Icon(Icons.android, color: Colors.grey),
+                            ),
                           ),
                         ),
                       ),
                     ),
-
-                  // Dock
-                  if (!isLoading && dockApps.isNotEmpty)
-                    Dock(
-                      apps: dockApps,
-                      onAppTap: _launchApp,
-                      isEditingMode: _isEditingMode,
-                      popupDelay: popupDelay,
-                      onAppLongPress: _showAppContextMenu,
-                      onAppDeleteTap: _showDeleteConfirmation,
-                    ),
-                  const SizedBox(height: 16),
-                ],
+                  );
+                },
               ),
-            ),
           ],
         ),
       ),
@@ -802,7 +957,7 @@ class AppGrid extends StatelessWidget {
   final Duration dragDelay;
   final Duration popupDelay;
   final Function(int) onPageChanged;
-  final Function(String) onAppTap;
+  final Function(AppInfo, Offset, Size) onAppTap;
   final Function(AppDragInfo) onDragStarted;
   final VoidCallback onDragEnded;
   final Function(int?) onHoverChanged;
@@ -873,7 +1028,7 @@ class _AppGridPage extends StatefulWidget {
   final bool isContextMenuOpen;
   final Duration dragDelay;
   final Duration popupDelay;
-  final Function(String) onAppTap;
+  final Function(AppInfo, Offset, Size) onAppTap;
   final Function(AppDragInfo) onDragStarted;
   final VoidCallback onDragEnded;
   final Function(int?) onHoverChanged;
@@ -994,17 +1149,25 @@ class _AppGridPageState extends State<_AppGridPage> {
 
           final isBeingDragged = widget.activeDragInfo?.app.packageName == app.packageName;
 
-          final appWidget = AppIcon(
-            app: app,
-            onTap: widget.isEditingMode ? () {} : () => widget.onAppTap(app.packageName),
-          );
-
           final currentChild = widget.isContextMenuOpen
               ? Opacity(
                   opacity: isBeingDragged ? 0.0 : 1.0,
-                  child: GestureDetector(
-                    onTap: widget.isEditingMode ? () {} : () => widget.onAppTap(app.packageName),
-                    child: appWidget,
+                  child: Builder(
+                    builder: (context) => GestureDetector(
+                      onTap: widget.isEditingMode
+                          ? () {}
+                          : () {
+                              final renderBox = context.findRenderObject() as RenderBox?;
+                              if (renderBox != null) {
+                                final pos = renderBox.localToGlobal(Offset.zero);
+                                final size = renderBox.size;
+                                widget.onAppTap(app, pos, size);
+                              }
+                            },
+                      child: AppIcon(
+                        app: app,
+                      ),
+                    ),
                   ),
                 )
               : Listener(
@@ -1061,9 +1224,22 @@ class _AppGridPageState extends State<_AppGridPage> {
                     },
                     child: Opacity(
                       opacity: isBeingDragged ? 0.0 : 1.0,
-                      child: GestureDetector(
-                        onTap: widget.isEditingMode ? () {} : () => widget.onAppTap(app.packageName),
-                        child: appWidget,
+                      child: Builder(
+                        builder: (context) => GestureDetector(
+                          onTap: widget.isEditingMode
+                              ? () {}
+                              : () {
+                                  final renderBox = context.findRenderObject() as RenderBox?;
+                                  if (renderBox != null) {
+                                    final pos = renderBox.localToGlobal(Offset.zero);
+                                    final size = renderBox.size;
+                                    widget.onAppTap(app, pos, size);
+                                  }
+                                },
+                          child: AppIcon(
+                            app: app,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1128,7 +1304,7 @@ class _AppGridPageState extends State<_AppGridPage> {
 
 class Dock extends StatelessWidget {
   final List<AppInfo> apps;
-  final Function(String) onAppTap;
+  final Function(AppInfo, Offset, Size) onAppTap;
   final bool isEditingMode;
   final Duration popupDelay;
   final Function(BuildContext, Offset, AppInfo, int) onAppLongPress;
@@ -1167,7 +1343,6 @@ class Dock extends StatelessWidget {
               children: apps.map((app) {
                 final appWidget = AppIcon(
                   app: app,
-                  onTap: isEditingMode ? () {} : () => onAppTap(app.packageName),
                   showLabel: false,
                 );
 
@@ -1215,7 +1390,9 @@ class Dock extends StatelessWidget {
                         onShowPopup: (position) {
                           onAppLongPress(context, position, app, -1);
                         },
-                        onTap: () => onAppTap(app.packageName),
+                        onTapWithDetails: (position, size) {
+                          onAppTap(app, position, size);
+                        },
                         child: wiggledApp,
                       );
               }).toList(),
@@ -1229,14 +1406,14 @@ class Dock extends StatelessWidget {
 
 class DockAppGestureDetector extends StatefulWidget {
   final Widget child;
-  final VoidCallback onTap;
+  final Function(Offset, Size) onTapWithDetails;
   final Function(Offset) onShowPopup;
   final Duration popupDelay;
 
   const DockAppGestureDetector({
     super.key,
     required this.child,
-    required this.onTap,
+    required this.onTapWithDetails,
     required this.onShowPopup,
     required this.popupDelay,
   });
@@ -1290,7 +1467,13 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
       onPointerUp: (event) {
         _timer?.cancel();
         if (!_moved && !_fired) {
-          widget.onTap();
+          final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+          if (renderBox != null) {
+            widget.onTapWithDetails(
+              renderBox.localToGlobal(Offset.zero),
+              renderBox.size,
+            );
+          }
         }
       },
       onPointerCancel: (event) {
@@ -1303,74 +1486,80 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
 
 class AppIcon extends StatelessWidget {
   final AppInfo app;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool showLabel;
 
   const AppIcon({
     super.key,
     required this.app,
-    required this.onTap,
+    this.onTap,
     this.showLabel = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+    final iconColumn = Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: app.icon.isNotEmpty
+                ? Image.memory(
+                    app.icon,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.android, color: Colors.grey, size: 40),
+                  )
+                : const Icon(Icons.android, color: Colors.grey, size: 40),
+          ),
+        ),
+        if (showLabel) ...[
+          const SizedBox(height: 6),
+          Text(
+            app.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              shadows: [
+                Shadow(
+                  offset: Offset(0, 1),
+                  blurRadius: 2,
+                  color: Colors.black87,
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: app.icon.isNotEmpty
-                  ? Image.memory(
-                      app.icon,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          const Icon(Icons.android, color: Colors.grey, size: 40),
-                    )
-                  : const Icon(Icons.android, color: Colors.grey, size: 40),
-            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
           ),
-          if (showLabel) ...[
-            const SizedBox(height: 6),
-            Text(
-              app.label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                shadows: [
-                  Shadow(
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                    color: Colors.black87,
-                  ),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
         ],
-      ),
+      ],
+    );
+
+    if (onTap == null) {
+      return iconColumn;
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: iconColumn,
     );
   }
 }

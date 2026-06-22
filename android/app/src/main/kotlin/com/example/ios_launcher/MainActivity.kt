@@ -36,8 +36,8 @@ class MainActivity : FlutterActivity() {
                 "launchApp" -> {
                     val packageName = call.argument<String>("packageName")
                     if (packageName != null) {
-                        launchApp(packageName)
-                        result.success(true)
+                        val success = launchApp(packageName)
+                        result.success(success)
                     } else {
                         result.error("INVALID_ARGS", "Package name is null", null)
                     }
@@ -91,10 +91,27 @@ class MainActivity : FlutterActivity() {
         return appList.sortedBy { (it["label"] as String).lowercase() }
     }
 
-    private fun launchApp(packageName: String) {
+    private fun launchApp(packageName: String): Boolean {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            startActivity(launchIntent)
+        return if (launchIntent != null) {
+            try {
+                // Add FLAG_ACTIVITY_NO_ANIMATION flag
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                
+                // Create options with zero/no custom animations
+                val options = android.app.ActivityOptions.makeCustomAnimation(this, 0, 0)
+                startActivity(launchIntent, options.toBundle())
+                
+                // Legacy transition override for immediately removing transition animation
+                @Suppress("DEPRECATION")
+                overridePendingTransition(0, 0)
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("ios_launcher", "Failed to start activity: ${e.message}", e)
+                false
+            }
+        } else {
+            false
         }
     }
 
