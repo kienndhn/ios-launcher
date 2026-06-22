@@ -42,6 +42,15 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "Package name is null", null)
                     }
                 }
+                "uninstallApp" -> {
+                    val packageName = call.argument<String>("packageName")
+                    if (packageName != null) {
+                        uninstallApp(packageName)
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "Package name is null", null)
+                    }
+                }
                 "isDefaultLauncher" -> {
                     result.success(isDefaultLauncher())
                 }
@@ -86,6 +95,17 @@ class MainActivity : FlutterActivity() {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
         if (launchIntent != null) {
             startActivity(launchIntent)
+        }
+    }
+
+    private fun uninstallApp(packageName: String) {
+        try {
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "Failed to uninstall app: ${e.message}", e)
         }
     }
 
@@ -165,5 +185,33 @@ class MainActivity : FlutterActivity() {
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
         return stream.toByteArray()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hideSystemNavigationBar()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemNavigationBar()
+        }
+    }
+
+    private fun hideSystemNavigationBar() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController
+            if (controller != null) {
+                controller.hide(android.view.WindowInsets.Type.navigationBars())
+                controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            )
+        }
     }
 }
