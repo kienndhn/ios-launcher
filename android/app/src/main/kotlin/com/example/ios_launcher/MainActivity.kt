@@ -17,9 +17,17 @@ import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import android.net.Uri
+import android.app.WallpaperManager
+import android.graphics.LinearGradient
+import android.graphics.Shader
+import android.graphics.Paint
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.ios_launcher/apps"
+    private val REQUEST_CODE_PICK_IMAGE = 1002
+    private var pendingPickImageResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -57,6 +65,62 @@ class MainActivity : FlutterActivity() {
                 "openDefaultLauncherSettings" -> {
                     openDefaultLauncherSettings()
                     result.success(true)
+                }
+                "pickImageFromGallery" -> {
+                    pendingPickImageResult = result
+                    val intent = Intent(Intent.ACTION_PICK).apply {
+                        type = "image/*"
+                    }
+                    try {
+                        startActivityForResult(intent, REQUEST_CODE_PICK_IMAGE)
+                    } catch (e: Exception) {
+                        pendingPickImageResult = null
+                        result.error("PICK_ERROR", "Failed to start image picker: ${e.message}", null)
+                    }
+                }
+                "setGradientWallpaper" -> {
+                    val color1 = call.argument<Long>("color1")?.toInt()
+                    val color2 = call.argument<Long>("color2")?.toInt()
+                    if (color1 != null && color2 != null) {
+                        Thread {
+                            val success = setGradientWallpaper(color1, color2)
+                            runOnUiThread {
+                                result.success(success)
+                            }
+                        }.start()
+                    } else {
+                        result.error("INVALID_ARGS", "Colors are null", null)
+                    }
+                }
+                "getWallpaperSettings" -> {
+                    result.success(getWallpaperSettings())
+                }
+                "getWidgetSettings" -> {
+                    result.success(getWidgetSettings())
+                }
+                "saveWidgetSettings" -> {
+                    val showClock = call.argument<Boolean>("showClock") ?: false
+                    val showWeather = call.argument<Boolean>("showWeather") ?: false
+                    val showBattery = call.argument<Boolean>("showBattery") ?: false
+                    saveWidgetSettings(showClock, showWeather, showBattery)
+                    result.success(true)
+                }
+                "saveGridLayout" -> {
+                    val layout = call.argument<List<String>>("layout")
+                    if (layout != null) {
+                        saveGridLayout(layout)
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "Layout is null", null)
+                    }
+                }
+                "getGridLayout" -> {
+                    result.success(getGridLayout())
+                }
+                "getBatteryLevel" -> {
+                    val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+                    val level = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                    result.success(level)
                 }
                 else -> {
                     result.notImplemented()
@@ -183,6 +247,126 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             android.util.Log.e("ios_launcher", "All methods failed: ${e.message}", e)
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CODE_PICK_IMAGE) {
+            val result = pendingPickImageResult
+            pendingPickImageResult = null
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                Thread {
+                    try {
+                        val imageFile = File(filesDir, "wallpaper.png")
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(imageFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        
+                        // Set system wallpaper
+                        contentResolver.openInputStream(uri)?.use { input ->
+                            WallpaperManager.getInstance(applicationContext).setStream(input)
+                        }
+
+                        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().apply {
+                            putString("wallpaper_type", "image")
+                            putString("wallpaper_image_path", imageFile.absolutePath)
+                            apply()
+                        }
+
+                        runOnUiThread {
+                            result?.success(imageFile.absolutePath)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("ios_launcher", "Failed to save/set wallpaper: ${e.message}", e)
+                        runOnUiThread {
+                            result?.error("WALLPAPER_ERROR", e.message, null)
+                        }
+                    }
+                }.start()
+            } else {
+                result?.success(null)
+            }
+        }
+    }
+
+    private fun setGradientWallpaper(color1: Int, color2: Int): Boolean {
+        return try {
+            val width = 1080
+            val height = 2400
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            val paint = Paint().apply {
+                shader = LinearGradient(
+                    0f, 0f, 0f, height.toFloat(),
+                    color1, color2,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+            WallpaperManager.getInstance(applicationContext).setBitmap(bitmap)
+            
+            val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putString("wallpaper_type", "gradient")
+                putInt("color1", color1)
+                putInt("color2", color2)
+                apply()
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "Failed to set gradient wallpaper: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun getWallpaperSettings(): Map<String, Any?> {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        return mapOf(
+            "type" to prefs.getString("wallpaper_type", "gradient"),
+            "color1" to prefs.getInt("color1", 0xFF1D2671.toInt()),
+            "color2" to prefs.getInt("color2", 0xFFC33764.toInt()),
+            "imagePath" to prefs.getString("wallpaper_image_path", null)
+        )
+    }
+
+    private fun getWidgetSettings(): Map<String, Boolean> {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        return mapOf(
+            "showClock" to prefs.getBoolean("show_clock", false),
+            "showWeather" to prefs.getBoolean("show_weather", false),
+            "showBattery" to prefs.getBoolean("show_battery", false)
+        )
+    }
+
+    private fun saveWidgetSettings(showClock: Boolean, showWeather: Boolean, showBattery: Boolean) {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putBoolean("show_clock", showClock)
+            putBoolean("show_weather", showWeather)
+            putBoolean("show_battery", showBattery)
+            apply()
+        }
+    }
+
+    private fun saveGridLayout(layout: List<String>) {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("grid_layout", layout.joinToString(","))
+            apply()
+        }
+    }
+
+    private fun getGridLayout(): List<String> {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        val layoutStr = prefs.getString("grid_layout", "") ?: ""
+        if (layoutStr.isEmpty()) {
+            return emptyList()
+        }
+        return layoutStr.split(",")
     }
 
     private fun drawableToByteArray(drawable: Drawable): ByteArray? {
