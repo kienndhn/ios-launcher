@@ -185,6 +185,24 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _changeWallpaperToAsset(String assetPath) async {
+    try {
+      final bool success = await platform.invokeMethod('setAssetWallpaper', {
+        'assetPath': assetPath,
+      });
+
+      if (success && mounted) {
+        setState(() {
+          _wallpaperType = 'asset';
+          _wallpaperImagePath = assetPath;
+        });
+      }
+    } catch (e) {
+      print("Failed to set asset wallpaper: $e");
+    }
+  }
+
+
   Future<void> _loadApps() async {
     try {
       final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
@@ -692,7 +710,6 @@ class _HomeScreenState extends State<HomeScreen>
     final borderColor = themeExt.borderColor;
     final textColor = themeExt.textColor;
     final dividerColor = themeExt.dividerColor;
-    final dangerColor = const Color(0xFFFF3B30);
 
     OverlayState? overlayState = Overlay.of(context);
     late OverlayEntry overlayEntry;
@@ -1150,10 +1167,14 @@ class _HomeScreenState extends State<HomeScreen>
                   final scale = 1.0 - 0.05 * curve;
 
                   Widget wallpaperWidget;
-                  if (_wallpaperType == 'image' &&
-                      _wallpaperImagePath != null) {
+                  if (_wallpaperType == 'image' && _wallpaperImagePath != null) {
                     wallpaperWidget = Image.file(
                       File(_wallpaperImagePath!),
+                      fit: BoxFit.cover,
+                    );
+                  } else if (_wallpaperType == 'asset' && _wallpaperImagePath != null) {
+                    wallpaperWidget = Image.asset(
+                      _wallpaperImagePath!,
                       fit: BoxFit.cover,
                     );
                   } else {
@@ -1543,88 +1564,118 @@ class _HomeScreenState extends State<HomeScreen>
                     ),
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    height: 120,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        // Gallery Picker Card
-                        Builder(
-                          builder: (context) {
-                            final iconBgColor = isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
-                            final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
-                            return GestureDetector(
-                              onTap: () {
-                                Navigator.pop(context);
-                                _changeWallpaperToGallery();
-                              },
-                              child: Container(
-                                width: 80,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  color: iconBgColor,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.photo_library_outlined,
-                                      color: textColor,
-                                      size: 28,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Thư viện',
-                                      style: TextStyle(
-                                        color: subTextColor,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Màu sắc', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 120,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                // Gallery Picker Card
+                                Builder(
+                                  builder: (context) {
+                                    final iconBgColor = isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
+                                    final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
+                                    return GestureDetector(
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _changeWallpaperToGallery();
+                                      },
+                                      child: Container(
+                                        width: 80,
+                                        margin: const EdgeInsets.only(right: 12),
+                                        decoration: BoxDecoration(
+                                          color: iconBgColor,
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.photo_library_outlined,
+                                              color: textColor,
+                                              size: 28,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Thư viện',
+                                              style: TextStyle(
+                                                color: subTextColor,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                                    );
+                                  }
                                 ),
-                              ),
-                            );
-                          }
-                        ),
-
-                        // Curated Gradient 1: iOS Classic
-                        _buildGradientOption(
-                          const Color(0xFF1D2671),
-                          const Color(0xFFC33764),
-                          'iOS Classic',
-                        ),
-                        // Curated Gradient 2: Aurora Blue
-                        _buildGradientOption(
-                          const Color(0xFF00B4DB),
-                          const Color(0xFF0083B0),
-                          'Aurora',
-                        ),
-                        // Curated Gradient 3: Sunset Glow
-                        _buildGradientOption(
-                          const Color(0xFFF12711),
-                          const Color(0xFFF5AF19),
-                          'Sunset',
-                        ),
-                        // Curated Gradient 4: Midnight
-                        _buildGradientOption(
-                          const Color(0xFF0F2027),
-                          const Color(0xFF2C5364),
-                          'Midnight',
-                        ),
-                        // Curated Gradient 5: Emerald
-                        _buildGradientOption(
-                          const Color(0xFF11998E),
-                          const Color(0xFF38EF7D),
-                          'Emerald',
-                        ),
-                      ],
+                                _buildGradientOption(const Color(0xFF1D2671), const Color(0xFFC33764), 'iOS Classic'),
+                                _buildGradientOption(const Color(0xFF00B4DB), const Color(0xFF0083B0), 'Aurora'),
+                                _buildGradientOption(const Color(0xFFF12711), const Color(0xFFF5AF19), 'Sunset'),
+                                _buildGradientOption(const Color(0xFF0F2027), const Color(0xFF2C5364), 'Midnight'),
+                                _buildGradientOption(const Color(0xFF11998E), const Color(0xFF38EF7D), 'Emerald'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text('Phong cảnh', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 180,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                _buildAssetOption('assets/wallpapers/landscape_1.png', 'Biển'),
+                                _buildAssetOption('assets/wallpapers/landscape_2.png', 'Núi'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text('Cây cối', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 180,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                _buildAssetOption('assets/wallpapers/plant_1.png', 'Hoa'),
+                                _buildAssetOption('assets/wallpapers/plant_2.png', 'Trầu bà Nam Mỹ'),
+                                _buildAssetOption('assets/wallpapers/plant_3.png', 'Lá dương xỉ'),
+                                _buildAssetOption('assets/wallpapers/plant_4.png', 'Hoa Tulip'),
+                                _buildAssetOption('assets/wallpapers/plant_5.png', 'Cây trúc'),
+                                _buildAssetOption('assets/wallpapers/plant_6.png', 'Oải hương'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text('Khác', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 180,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                _buildAssetOption('assets/wallpapers/other_1.png', 'Ảnh 1'),
+                                _buildAssetOption('assets/wallpapers/other_2.png', 'Ảnh 2'),
+                                _buildAssetOption('assets/wallpapers/other_3.png', 'Ảnh 3'),
+                                _buildAssetOption('assets/wallpapers/other_4.png', 'Ảnh 4'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1681,6 +1732,57 @@ class _HomeScreenState extends State<HomeScreen>
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAssetOption(String assetPath, String label) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isSelected = _wallpaperType == 'asset' && _wallpaperImagePath == assetPath;
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+        _changeWallpaperToAsset(assetPath);
+      },
+      child: Container(
+        width: 100,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFF0A84FF)
+                : (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
+            width: isSelected ? 2.0 : 0.8,
+          ),
+          image: DecorationImage(
+            image: AssetImage(assetPath),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black38,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(14),
+              ),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.center,

@@ -95,6 +95,20 @@ class MainActivity : FlutterActivity() {
                 "getWallpaperSettings" -> {
                     result.success(getWallpaperSettings())
                 }
+                "setAssetWallpaper" -> {
+                    val assetPath = call.argument<String>("assetPath")
+                    if (assetPath != null) {
+                        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().apply {
+                            putString("wallpaper_type", "asset")
+                            putString("wallpaper_image_path", assetPath)
+                            apply()
+                        }
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "Asset path is null", null)
+                    }
+                }
                 "getWidgetSettings" -> {
                     result.success(getWidgetSettings())
                 }
