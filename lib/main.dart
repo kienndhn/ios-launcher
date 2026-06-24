@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'utils/theme.dart';
 import 'views/home_screen.dart';
 
 void main() {
@@ -25,11 +26,9 @@ class IOSLauncherApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'iOS Launcher',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
       home: const HomeScreen(),
       debugShowCheckedModeBanner: false,
     );

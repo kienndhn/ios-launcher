@@ -117,6 +117,18 @@ class MainActivity : FlutterActivity() {
                 "getGridLayout" -> {
                     result.success(getGridLayout())
                 }
+                "saveDockLayout" -> {
+                    val layout = call.argument<List<String>>("layout")
+                    if (layout != null) {
+                        saveDockLayout(layout)
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "Layout is null", null)
+                    }
+                }
+                "getDockLayout" -> {
+                    result.success(getDockLayout())
+                }
                 "getBatteryLevel" -> {
                     val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
                     val level = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -363,6 +375,23 @@ class MainActivity : FlutterActivity() {
     private fun getGridLayout(): List<String> {
         val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
         val layoutStr = prefs.getString("grid_layout", "") ?: ""
+        if (layoutStr.isEmpty()) {
+            return emptyList()
+        }
+        return layoutStr.split(",")
+    }
+
+    private fun saveDockLayout(layout: List<String>) {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("dock_layout", layout.joinToString(","))
+            apply()
+        }
+    }
+
+    private fun getDockLayout(): List<String> {
+        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+        val layoutStr = prefs.getString("dock_layout", "") ?: ""
         if (layoutStr.isEmpty()) {
             return emptyList()
         }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../models/app_info.dart';
 import '../models/grid_item.dart';
 import '../utils/grid_utils.dart';
+import '../utils/theme.dart';
 import '../widgets/app_grid.dart';
 import '../widgets/dock.dart';
 
@@ -48,6 +49,10 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showBatteryWidget = false;
 
   AppInfo? _launchingApp;
+  AppGridItem? _displacedDockAppItem;
+  Map<String, Offset> _displacedInitialOffsets = {};
+  Map<String, Offset> _dockInitialOffsets = {};
+  final AppInfo _dockDummyApp = AppInfo(packageName: 'dock_dummy', label: '', icon: Uint8List(0));
   Offset? _launchStartBounds;
   Size? _launchStartSize;
   late AnimationController _launchAnimationController;
@@ -223,16 +228,41 @@ class _HomeScreenState extends State<HomeScreen>
         print("Failed to get grid layout: $e");
       }
 
-      if (loaded.length >= 4) {
-        dockApps = loaded.sublist(0, 4);
-      } else {
-        dockApps = loaded;
+      List<String> savedDockLayout = [];
+      try {
+        final List<dynamic>? dockResult = await platform.invokeMethod('getDockLayout');
+        if (dockResult != null) {
+          savedDockLayout = List<String>.from(dockResult);
+        }
+      } catch (e) {
+        print("Failed to get dock layout: $e");
       }
 
-      final Map<String, AppInfo> appMap = {
-        for (final app in loaded)
-          if (!dockApps.contains(app)) app.packageName: app,
+      final Map<String, AppInfo> allAppMap = {
+        for (final app in loaded) app.packageName: app,
       };
+
+      if (savedDockLayout.isNotEmpty) {
+        dockApps = [];
+        for (final id in savedDockLayout) {
+          if (allAppMap.containsKey(id)) {
+            dockApps.add(allAppMap[id]!);
+          }
+        }
+      } else {
+        if (loaded.length >= 4) {
+          dockApps = loaded.sublist(0, 4);
+        } else {
+          dockApps = loaded;
+        }
+      }
+
+      final Map<String, AppInfo> appMap = {};
+      for (final app in loaded) {
+        if (!dockApps.any((d) => d.packageName == app.packageName)) {
+          appMap[app.packageName] = app;
+        }
+      }
 
       final List<GridItem> tempGrid = [];
 
@@ -305,6 +335,9 @@ class _HomeScreenState extends State<HomeScreen>
       if (savedLayout.isEmpty) {
         _saveGridLayout();
       }
+      if (savedDockLayout.isEmpty) {
+        _saveDockLayout();
+      }
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _checkDefaultLauncher();
@@ -324,6 +357,15 @@ class _HomeScreenState extends State<HomeScreen>
       await platform.invokeMethod('saveGridLayout', {'layout': layoutIds});
     } catch (e) {
       print("Failed to save grid layout: $e");
+    }
+  }
+
+  Future<void> _saveDockLayout() async {
+    try {
+      final List<String> layoutIds = dockApps.map((app) => app.packageName).toList();
+      await platform.invokeMethod('saveDockLayout', {'layout': layoutIds});
+    } catch (e) {
+      print("Failed to save dock layout: $e");
     }
   }
 
@@ -512,6 +554,14 @@ class _HomeScreenState extends State<HomeScreen>
       _activeDragInfo = null;
       _hoveredSlot = null;
     });
+    
+    final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
+    final bgColor = themeExt.dialogBgColor;
+    final borderColor = themeExt.borderColor;
+    final textColor = themeExt.textColor;
+    final subTextColor = themeExt.subTextColor;
+    final dividerColor = themeExt.dividerColor;
+
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.6),
@@ -527,10 +577,10 @@ class _HomeScreenState extends State<HomeScreen>
                   width: 270,
                   padding: const EdgeInsets.only(top: 20),
                   decoration: BoxDecoration(
-                    color: const Color(0xCC1E1E1E),
+                    color: bgColor,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.08),
+                      color: borderColor,
                       width: 0.5,
                     ),
                   ),
@@ -545,8 +595,8 @@ class _HomeScreenState extends State<HomeScreen>
                             Text(
                               'Xóa "${app.label}"?',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: textColor,
                                 fontSize: 17,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -556,7 +606,7 @@ class _HomeScreenState extends State<HomeScreen>
                               'Xóa ứng dụng này cũng sẽ xóa tất cả dữ liệu của nó khỏi thiết bị của bạn.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: subTextColor,
                                 fontSize: 13,
                               ),
                             ),
@@ -566,7 +616,7 @@ class _HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 20),
                       Container(
                         height: 0.5,
-                        color: Colors.white.withOpacity(0.15),
+                        color: dividerColor,
                       ),
                       Row(
                         children: [
@@ -590,7 +640,7 @@ class _HomeScreenState extends State<HomeScreen>
                           Container(
                             width: 0.5,
                             height: 44,
-                            color: Colors.white.withOpacity(0.15),
+                            color: dividerColor,
                           ),
                           Expanded(
                             child: TextButton(
@@ -636,6 +686,14 @@ class _HomeScreenState extends State<HomeScreen>
       _activeDragInfo = null;
       _hoveredSlot = null;
     });
+    
+    final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
+    final bgColor = themeExt.menuBgColor;
+    final borderColor = themeExt.borderColor;
+    final textColor = themeExt.textColor;
+    final dividerColor = themeExt.dividerColor;
+    final dangerColor = const Color(0xFFFF3B30);
+
     OverlayState? overlayState = Overlay.of(context);
     late OverlayEntry overlayEntry;
 
@@ -690,10 +748,10 @@ class _HomeScreenState extends State<HomeScreen>
                         child: Container(
                           width: 220,
                           decoration: BoxDecoration(
-                            color: const Color(0xCC252525),
+                            color: bgColor,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
+                              color: borderColor,
                               width: 0.5,
                             ),
                           ),
@@ -717,10 +775,10 @@ class _HomeScreenState extends State<HomeScreen>
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(
+                                      Text(
                                         'Sửa Màn hình chính',
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: textColor,
                                           fontSize: 15,
                                           fontWeight: FontWeight.w400,
                                           decoration: TextDecoration.none,
@@ -728,7 +786,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       ),
                                       Icon(
                                         Icons.edit,
-                                        color: Colors.white.withOpacity(0.8),
+                                        color: textColor.withOpacity(0.8),
                                         size: 18,
                                       ),
                                     ],
@@ -737,7 +795,7 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                               Container(
                                 height: 0.5,
-                                color: Colors.white.withOpacity(0.1),
+                                color: dividerColor,
                               ),
                               GestureDetector(
                                 onTap: () {
@@ -806,7 +864,16 @@ class _HomeScreenState extends State<HomeScreen>
     if (!_isGlobalDragging) return;
 
     final dx = event.position.dx;
+    final dy = event.position.dy;
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    // Nếu đang kéo ở khu vực dock thì không cho phép chuyển trang
+    if (dy > screenHeight - 140) {
+      _pageTurnTimer?.cancel();
+      return;
+    }
+
     int totalPages = _calculateTotalPages(gridApps);
     if (_isGlobalDragging) {
       totalPages += 1;
@@ -891,21 +958,163 @@ class _HomeScreenState extends State<HomeScreen>
       int targetRowClamped = targetSlot.row.clamp(0, 6 - dragItem.height);
       int targetColClamped = targetSlot.col.clamp(0, 4 - dragItem.width);
 
-      final gridItemIndex = gridApps.indexWhere((item) => item.id == dragItem.id);
-      if (gridItemIndex != -1) {
-        gridApps[gridItemIndex].page = targetSlot.page;
-        gridApps[gridItemIndex].row = targetRowClamped;
-        gridApps[gridItemIndex].col = targetColClamped;
-
-        // Giải quyết va chạm xung quanh vị trí mới được thả
+      if (dragInfo.startPage == -1) {
+        dockApps.removeWhere((app) => app.packageName == dragItem.id);
+        gridApps.add(dragItem);
+        dragItem.page = targetSlot.page;
+        dragItem.row = targetRowClamped;
+        dragItem.col = targetColClamped;
         resolveOverlaps(gridApps, fixedId: dragItem.id);
+        _saveDockLayout();
+      } else {
+        final gridItemIndex = gridApps.indexWhere((item) => item.id == dragItem.id);
+        if (gridItemIndex != -1) {
+          gridApps[gridItemIndex].page = targetSlot.page;
+          gridApps[gridItemIndex].row = targetRowClamped;
+          gridApps[gridItemIndex].col = targetColClamped;
+          resolveOverlaps(gridApps, fixedId: dragItem.id);
+        }
       }
     });
     _saveGridLayout();
+    _handleDockLeave();
+  }
+
+  void _handleDockHover(GridDragInfo dragInfo, int targetIndex) {
+    if (dragInfo.item is! AppGridItem) return;
+
+    if (dragInfo.startPage != -1) {
+      bool changed = false;
+
+      if (_displacedDockAppItem == null && dockApps.length == 4 && !dockApps.contains(_dockDummyApp)) {
+        final displacedApp = dockApps.removeAt(targetIndex.clamp(0, 3));
+        final draggedItem = dragInfo.item as AppGridItem;
+        
+        _displacedDockAppItem = AppGridItem(
+          displacedApp,
+          page: draggedItem.page,
+          row: draggedItem.row,
+          col: draggedItem.col,
+        );
+        gridApps.add(_displacedDockAppItem!);
+
+        final screenWidth = MediaQuery.of(context).size.width;
+        final screenHeight = MediaQuery.of(context).size.height;
+        final safeAreaTop = MediaQuery.of(context).padding.top;
+        final gap = (screenWidth - 32 - 240) / 5;
+        
+        // Global dock item position
+        final dockGlobalX = 16.0 + gap + targetIndex * (60.0 + gap);
+        final dockGlobalY = screenHeight - 110.0;
+        
+        // Convert to AppGrid local coordinates
+        final startX = dockGlobalX - 22.0;
+        final startY = dockGlobalY - (safeAreaTop + 32.0);
+
+        _displacedInitialOffsets = Map.from(_displacedInitialOffsets);
+        _displacedInitialOffsets[_displacedDockAppItem!.id] = Offset(startX, startY);
+
+        changed = true;
+      }
+
+      int currentIndex = dockApps.indexOf(_dockDummyApp);
+      if (currentIndex != targetIndex) {
+        dockApps.remove(_dockDummyApp);
+        dockApps.insert(targetIndex.clamp(0, dockApps.length), _dockDummyApp);
+        changed = true;
+      }
+
+      if (changed) setState(() {});
+    } else {
+      bool changed = false;
+      final draggedAppId = dragInfo.item.id;
+      final currentIndex = dockApps.indexWhere((app) => app.packageName == draggedAppId);
+      if (currentIndex != -1 && currentIndex != targetIndex) {
+        final appToMove = dockApps.removeAt(currentIndex);
+        dockApps.insert(targetIndex.clamp(0, dockApps.length), appToMove);
+        changed = true;
+      }
+      if (changed) setState(() {});
+    }
+  }
+
+  void _handleDockLeave() {
+    bool changed = false;
+    if (dockApps.contains(_dockDummyApp)) {
+      dockApps.remove(_dockDummyApp);
+      changed = true;
+    }
+    if (_displacedDockAppItem != null) {
+      final gridPos = _displacedDockAppItem!;
+      final screenHeight = MediaQuery.of(context).size.height;
+      final safeAreaTop = MediaQuery.of(context).padding.top;
+      
+      // Global grid item position
+      final gridGlobalX = 22.0 + gridPos.col * 72.0;
+      final gridGlobalY = safeAreaTop + 32.0 + gridPos.row * 70.0;
+      
+      // Convert to Dock local coordinates
+      final startX = gridGlobalX - 16.0;
+      final startY = gridGlobalY - (screenHeight - 110.0);
+      
+      _dockInitialOffsets = Map.from(_dockInitialOffsets);
+      _dockInitialOffsets[gridPos.app.packageName] = Offset(startX, startY);
+
+      gridApps.remove(_displacedDockAppItem);
+      dockApps.add(gridPos.app);
+      _displacedInitialOffsets = Map.from(_displacedInitialOffsets);
+      _displacedInitialOffsets.remove(gridPos.id);
+      _displacedDockAppItem = null;
+      changed = true;
+    }
+    if (changed) setState(() {});
+  }
+
+  void _handleDockDrop(GridDragInfo dragInfo, int targetIndex) {
+    _hoverTimer?.cancel();
+    _hoverTimer = null;
+    setState(() {
+      _isGlobalDragging = false;
+      _activeDragInfo = null;
+      _hoveredSlot = null;
+
+      if (dragInfo.startPage == -1) {
+        final appIndex = dockApps.indexWhere((app) => app.packageName == dragInfo.item.id);
+        if (appIndex != -1) {
+          final app = dockApps.removeAt(appIndex);
+          if (targetIndex > appIndex) {
+            targetIndex--;
+          }
+          dockApps.insert(targetIndex.clamp(0, dockApps.length), app);
+        }
+      } else {
+        if (dragInfo.item is AppGridItem) {
+          final app = (dragInfo.item as AppGridItem).app;
+          gridApps.removeWhere((item) => item.id == dragInfo.item.id);
+
+          dockApps.remove(_dockDummyApp);
+          
+          if (_displacedDockAppItem != null) {
+            resolveOverlaps(gridApps);
+            _displacedDockAppItem = null;
+          } else if (dockApps.length >= 4) {
+            final displacedApp = dockApps.removeLast();
+            final draggedItem = dragInfo.item as AppGridItem;
+            gridApps.add(AppGridItem(displacedApp, page: draggedItem.page, row: draggedItem.row, col: draggedItem.col));
+            resolveOverlaps(gridApps);
+          }
+
+          dockApps.insert(targetIndex.clamp(0, dockApps.length), app);
+          _saveGridLayout();
+        }
+      }
+    });
+    _saveDockLayout();
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final int totalPages = _calculateTotalPages(gridApps);
     final displayTotalPages = _isGlobalDragging ? totalPages + 1 : totalPages;
 
@@ -979,7 +1188,66 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 },
                 child: Column(
+                  verticalDirection: VerticalDirection.up,
                   children: [
+                    const SizedBox(height: 16),
+                    // Dock
+                    if (!isLoading && dockApps.isNotEmpty)
+                      Dock(
+                        apps: dockApps,
+                        onAppTap: _animateAppLaunch,
+                        isEditingMode: _isEditingMode,
+                        popupDelay: popupDelay,
+                        dragDelay: dragDelay,
+                        onAppLongPress: _showAppContextMenu,
+                        onAppDeleteTap: _showDeleteConfirmation,
+                        onDockDragStarted: (dragInfo) {
+                          setState(() {
+                            _isGlobalDragging = true;
+                            _activeDragInfo = dragInfo;
+                          });
+                        },
+                        onDockDragEnded: () {
+                          _hoverTimer?.cancel();
+                          _hoverTimer = null;
+                          setState(() {
+                            _isGlobalDragging = false;
+                            _activeDragInfo = null;
+                            _hoveredSlot = null;
+                          });
+                          _pageTurnTimer?.cancel();
+                          _saveDockLayout();
+                        },
+                        onDockDrop: _handleDockDrop,
+                        onDockHover: _handleDockHover,
+                        onDockLeave: _handleDockLeave,
+                        forcedInitialOffsets: _dockInitialOffsets,
+                        activeDragInfo: _activeDragInfo,
+                      ),
+                    
+                    // Paging indicators
+                    if (!isLoading)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          displayTotalPages,
+                          (index) => Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 16,
+                            ),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index == _currentPage
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
+                            ),
+                          ),
+                        ),
+                      ),
+                    
                     Expanded(
                       child: Listener(
                         onPointerMove: _handlePointerMove,
@@ -1052,44 +1320,10 @@ class _HomeScreenState extends State<HomeScreen>
                                 onDrop: _handleDrop,
                                 onAppLongPress: _showAppContextMenu,
                                 onItemDeleteTap: _handleItemDelete,
+                                forcedInitialOffsets: _displacedInitialOffsets,
                               ),
                       ),
                     ),
-
-                    // Paging indicators
-                    if (!isLoading)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          displayTotalPages,
-                          (index) => Container(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 16,
-                            ),
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index == _currentPage
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    // Dock
-                    if (!isLoading && dockApps.isNotEmpty)
-                      Dock(
-                        apps: dockApps,
-                        onAppTap: _animateAppLaunch,
-                        isEditingMode: _isEditingMode,
-                        popupDelay: popupDelay,
-                        onAppLongPress: _showAppContextMenu,
-                        onAppDeleteTap: _showDeleteConfirmation,
-                      ),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -1111,10 +1345,10 @@ class _HomeScreenState extends State<HomeScreen>
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.35),
+                          color: isDarkMode ? Colors.black.withOpacity(0.35) : Colors.white.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.15),
+                            color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.15),
                             width: 0.8,
                           ),
                         ),
@@ -1125,11 +1359,12 @@ class _HomeScreenState extends State<HomeScreen>
                               icon: Icons.palette_outlined,
                               label: 'Hình nền',
                               onTap: _showWallpaperSelector,
+                              isDarkMode: isDarkMode,
                             ),
                             Container(
                               height: 24,
                               width: 1,
-                              color: Colors.white24,
+                              color: isDarkMode ? Colors.white24 : Colors.black26,
                               margin: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
@@ -1138,6 +1373,7 @@ class _HomeScreenState extends State<HomeScreen>
                               icon: Icons.add_to_home_screen_outlined,
                               label: 'Tiện ích',
                               onTap: _showWidgetSelector,
+                              isDarkMode: isDarkMode,
                             ),
                           ],
                         ),
@@ -1181,7 +1417,7 @@ class _HomeScreenState extends State<HomeScreen>
                         decoration: BoxDecoration(
                           color: Color.lerp(
                             Colors.transparent,
-                            const Color(0xFF1C1C1E),
+                            isDarkMode ? const Color(0xFF1C1C1E) : Colors.white,
                             curve,
                           ),
                           borderRadius: BorderRadius.circular(borderRadius),
@@ -1221,7 +1457,9 @@ class _HomeScreenState extends State<HomeScreen>
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    required bool isDarkMode,
   }) {
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -1230,12 +1468,12 @@ class _HomeScreenState extends State<HomeScreen>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 20),
+            Icon(icon, color: textColor, size: 20),
             const SizedBox(width: 8),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: textColor,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.2,
@@ -1248,6 +1486,13 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _showWallpaperSelector() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
+    final bgColor = themeExt.sheetBgColor;
+    final textColor = themeExt.textColor;
+    final dividerColor = themeExt.dividerColor;
+    final borderColor = themeExt.borderColor;
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1263,13 +1508,13 @@ class _HomeScreenState extends State<HomeScreen>
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                color: bgColor,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(28),
                   topRight: Radius.circular(28),
                 ),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.1),
+                  color: borderColor,
                   width: 0.5,
                 ),
               ),
@@ -1282,16 +1527,16 @@ class _HomeScreenState extends State<HomeScreen>
                       width: 36,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: dividerColor,
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'Thay đổi hình nền',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: textColor,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
@@ -1304,43 +1549,49 @@ class _HomeScreenState extends State<HomeScreen>
                       scrollDirection: Axis.horizontal,
                       children: [
                         // Gallery Picker Card
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _changeWallpaperToGallery();
-                          },
-                          child: Container(
-                            width: 80,
-                            margin: const EdgeInsets.only(right: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.15),
-                                width: 0.8,
-                              ),
-                            ),
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.photo_library_outlined,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Thư viện',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                        Builder(
+                          builder: (context) {
+                            final iconBgColor = isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
+                            final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.pop(context);
+                                _changeWallpaperToGallery();
+                              },
+                              child: Container(
+                                width: 80,
+                                margin: const EdgeInsets.only(right: 12),
+                                decoration: BoxDecoration(
+                                  color: iconBgColor,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1),
+                                    width: 0.8,
                                   ),
-                                  textAlign: TextAlign.center,
                                 ),
-                              ],
-                            ),
-                          ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.photo_library_outlined,
+                                      color: textColor,
+                                      size: 28,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Thư viện',
+                                      style: TextStyle(
+                                        color: subTextColor,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
                         ),
 
                         // Curated Gradient 1: iOS Classic
@@ -1386,6 +1637,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildGradientOption(Color c1, Color c2, String label) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final isSelected =
         _wallpaperType == 'gradient' &&
         _color1.value == c1.value &&
@@ -1403,7 +1655,7 @@ class _HomeScreenState extends State<HomeScreen>
           border: Border.all(
             color: isSelected
                 ? const Color(0xFF0A84FF)
-                : Colors.white.withOpacity(0.1),
+                : (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
             width: isSelected ? 2.0 : 0.8,
           ),
           gradient: LinearGradient(
@@ -1440,6 +1692,13 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _showWidgetSelector() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
+    final bgColor = themeExt.sheetBgColor;
+    final textColor = themeExt.textColor;
+    final dividerColor = themeExt.dividerColor;
+    final borderColor = themeExt.borderColor;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1457,13 +1716,13 @@ class _HomeScreenState extends State<HomeScreen>
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E).withOpacity(0.85),
+                    color: bgColor,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(28),
                       topRight: Radius.circular(28),
                     ),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.1),
+                      color: borderColor,
                       width: 0.5,
                     ),
                   ),
@@ -1476,16 +1735,16 @@ class _HomeScreenState extends State<HomeScreen>
                           width: 36,
                           height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.white24,
+                            color: dividerColor,
                             borderRadius: BorderRadius.circular(2.5),
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
+                      Text(
                         'Tiện ích màn hình',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: textColor,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           letterSpacing: -0.5,
@@ -1508,8 +1767,9 @@ class _HomeScreenState extends State<HomeScreen>
                           });
                           _saveWidgetSettings();
                         },
+                        isDarkMode: isDarkMode,
                       ),
-                      const Divider(color: Colors.white10),
+                      Divider(color: dividerColor),
                       _buildWidgetToggleRow(
                         icon: Icons.cloud_queue,
                         color: Colors.blue,
@@ -1526,8 +1786,9 @@ class _HomeScreenState extends State<HomeScreen>
                           });
                           _saveWidgetSettings();
                         },
+                        isDarkMode: isDarkMode,
                       ),
-                      const Divider(color: Colors.white10),
+                      Divider(color: dividerColor),
                       _buildWidgetToggleRow(
                         icon: Icons.battery_charging_full,
                         color: Colors.green,
@@ -1544,6 +1805,7 @@ class _HomeScreenState extends State<HomeScreen>
                           });
                           _saveWidgetSettings();
                         },
+                        isDarkMode: isDarkMode,
                       ),
                     ],
                   ),
@@ -1563,7 +1825,11 @@ class _HomeScreenState extends State<HomeScreen>
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
+    required bool isDarkMode,
   }) {
+    final textColor = isDarkMode ? Colors.white : Colors.black87;
+    final subTextColor = isDarkMode ? Colors.white54 : Colors.black54;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -1583,15 +1849,15 @@ class _HomeScreenState extends State<HomeScreen>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: textColor,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
                   subtitle,
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: subTextColor, fontSize: 12),
                 ),
               ],
             ),
@@ -1600,8 +1866,8 @@ class _HomeScreenState extends State<HomeScreen>
             value: value,
             activeColor: const Color(0xFF0A84FF),
             activeTrackColor: const Color(0xFF0A84FF).withOpacity(0.3),
-            inactiveThumbColor: Colors.white,
-            inactiveTrackColor: Colors.white24,
+            inactiveThumbColor: isDarkMode ? Colors.white : Colors.white,
+            inactiveTrackColor: isDarkMode ? Colors.white24 : Colors.black12,
             onChanged: onChanged,
           ),
         ],

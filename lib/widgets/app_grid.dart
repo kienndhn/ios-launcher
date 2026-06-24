@@ -28,6 +28,7 @@ class AppGrid extends StatelessWidget {
   final Function(GridDragInfo, GridCoordinate) onDrop;
   final Function(BuildContext, Offset, AppInfo, int) onAppLongPress;
   final Function(GridItem) onItemDeleteTap;
+  final Map<String, Offset>? forcedInitialOffsets;
 
   const AppGrid({
     super.key,
@@ -48,11 +49,13 @@ class AppGrid extends StatelessWidget {
     required this.onDrop,
     required this.onAppLongPress,
     required this.onItemDeleteTap,
+    this.forcedInitialOffsets,
   });
 
   @override
   Widget build(BuildContext context) {
     return PageView.builder(
+      clipBehavior: Clip.none,
       controller: pageController,
       onPageChanged: onPageChanged,
       physics: activeDragInfo != null
@@ -76,6 +79,7 @@ class AppGrid extends StatelessWidget {
           onDrop: onDrop,
           onAppLongPress: onAppLongPress,
           onItemDeleteTap: onItemDeleteTap,
+          forcedInitialOffsets: forcedInitialOffsets,
         );
       },
     );
@@ -98,6 +102,7 @@ class _AppGridPage extends StatefulWidget {
   final Function(GridDragInfo, GridCoordinate) onDrop;
   final Function(BuildContext, Offset, AppInfo, int) onAppLongPress;
   final Function(GridItem) onItemDeleteTap;
+  final Map<String, Offset>? forcedInitialOffsets;
 
   const _AppGridPage({
     required this.pageIndex,
@@ -115,6 +120,7 @@ class _AppGridPage extends StatefulWidget {
     required this.onDrop,
     required this.onAppLongPress,
     required this.onItemDeleteTap,
+    this.forcedInitialOffsets,
   });
 
   @override
@@ -128,6 +134,26 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
   final Map<String, Offset> _tempDropPositions = {};
   int _touchColOffset = 0;
   int _touchRowOffset = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.forcedInitialOffsets != null) {
+      _tempDropPositions.addAll(widget.forcedInitialOffsets!);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AppGridPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.forcedInitialOffsets != null) {
+      widget.forcedInitialOffsets!.forEach((key, value) {
+        if (oldWidget.forcedInitialOffsets?[key] == null) {
+          _tempDropPositions[key] = value;
+        }
+      });
+    }
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -156,6 +182,7 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
     }).toList();
 
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         // 1. Lưới tĩnh nhận sự kiện thả (Background Grid DragTargets)
         Positioned.fill(
