@@ -66,7 +66,7 @@ class AppGrid extends StatelessWidget {
       physics: activeDragInfo != null
           ? const NeverScrollableScrollPhysics()
           : const BouncingScrollPhysics(),
-      itemCount: totalPages + 1,
+      itemCount: isEditingMode ? totalPages : totalPages + 1,
       itemBuilder: (context, pageIndex) {
         if (pageIndex == totalPages) {
           return AppLibrary(
@@ -203,7 +203,7 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
               left: 22,
               right: 22,
               top: 32,
-              bottom: 0,
+              bottom: 130,
             ),
             child: GridView.count(
               crossAxisCount: 4,

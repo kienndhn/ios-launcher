@@ -1329,107 +1329,11 @@ class _HomeScreenState extends State<HomeScreen>
                     child: Transform.scale(scale: scale, child: child),
                   );
                 },
-                child: Column(
-                  verticalDirection: VerticalDirection.up,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
                   children: [
-                    const SizedBox(height: 16),
-                    // Dock
-                    if (!isLoading && dockApps.isNotEmpty)
-                      AnimatedBuilder(
-                        animation: _pageController,
-                        builder: (context, child) {
-                          double opacity = 1.0;
-                          double offsetMultiplier = 0.0;
-                          if (_pageController.hasClients) {
-                            final page = _pageController.page ?? 0.0;
-                            final threshold = displayTotalPages - 1;
-                            if (page > threshold) {
-                              opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
-                              offsetMultiplier = (page - threshold).clamp(0.0, 1.0);
-                            }
-                          }
-                          return Opacity(
-                            opacity: opacity,
-                            child: Transform.translate(
-                              offset: Offset(0, 100 * offsetMultiplier),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: Dock(
-                          apps: dockApps,
-                          onAppTap: _animateAppLaunch,
-                          isEditingMode: _isEditingMode,
-                          popupDelay: popupDelay,
-                          dragDelay: dragDelay,
-                          onAppLongPress: _showAppContextMenu,
-                          onAppDeleteTap: _showDeleteConfirmation,
-                          onDockDragStarted: (dragInfo) {
-                            setState(() {
-                              _isGlobalDragging = true;
-                              _activeDragInfo = dragInfo;
-                            });
-                          },
-                          onDockDragEnded: () {
-                            _hoverTimer?.cancel();
-                            _hoverTimer = null;
-                            setState(() {
-                              _isGlobalDragging = false;
-                              _activeDragInfo = null;
-                              _hoveredSlot = null;
-                            });
-                            _pageTurnTimer?.cancel();
-                            _saveDockLayout();
-                          },
-                          onDockDrop: _handleDockDrop,
-                          onDockHover: _handleDockHover,
-                          onDockLeave: _handleDockLeave,
-                          forcedInitialOffsets: _dockInitialOffsets,
-                          activeDragInfo: _activeDragInfo,
-                        ),
-                      ),
-
-                    // Paging indicators
-                    if (!isLoading)
-                      AnimatedBuilder(
-                        animation: _pageController,
-                        builder: (context, child) {
-                          double opacity = 1.0;
-                          if (_pageController.hasClients) {
-                            final page = _pageController.page ?? 0.0;
-                            final threshold = displayTotalPages - 1;
-                            if (page > threshold) {
-                              opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
-                            }
-                          }
-                          return Opacity(
-                            opacity: opacity,
-                            child: child,
-                          );
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(
-                            displayTotalPages,
-                            (index) => Container(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 16,
-                              ),
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: index == _currentPage
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.4),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                    Expanded(
+                    // AppGrid (placed first so it is rendered behind the Dock/Indicators)
+                    Positioned.fill(
                       child: Listener(
                         onPointerMove: _handlePointerMove,
                         child: isLoading
@@ -1523,6 +1427,112 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                       ),
                     ),
+
+                    // Paging indicators
+                    if (!isLoading)
+                      Positioned(
+                        bottom: 118,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedBuilder(
+                          animation: _pageController,
+                          builder: (context, child) {
+                            double opacity = 1.0;
+                            if (_pageController.hasClients) {
+                              final page = _pageController.page ?? 0.0;
+                              final threshold = displayTotalPages - 1;
+                              if (page > threshold) {
+                                opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
+                              }
+                            }
+                            return Opacity(
+                              opacity: opacity,
+                              child: child,
+                            );
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(
+                              displayTotalPages,
+                              (index) => Container(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 16,
+                                ),
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: index == _currentPage
+                                      ? Colors.white
+                                      : Colors.white.withOpacity(0.4),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Dock
+                    if (!isLoading && dockApps.isNotEmpty)
+                      Positioned(
+                        bottom: 16,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedBuilder(
+                          animation: _pageController,
+                          builder: (context, child) {
+                            double opacity = 1.0;
+                            double offsetMultiplier = 0.0;
+                            if (_pageController.hasClients) {
+                              final page = _pageController.page ?? 0.0;
+                              final threshold = displayTotalPages - 1;
+                              if (page > threshold) {
+                                opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
+                                offsetMultiplier = (page - threshold).clamp(0.0, 1.0);
+                              }
+                            }
+                            return Opacity(
+                              opacity: opacity,
+                              child: Transform.translate(
+                                offset: Offset(0, 100 * offsetMultiplier),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Dock(
+                            apps: dockApps,
+                            onAppTap: _animateAppLaunch,
+                            isEditingMode: _isEditingMode,
+                            popupDelay: popupDelay,
+                            dragDelay: dragDelay,
+                            onAppLongPress: _showAppContextMenu,
+                            onAppDeleteTap: _showDeleteConfirmation,
+                            onDockDragStarted: (dragInfo) {
+                              setState(() {
+                                _isGlobalDragging = true;
+                                _activeDragInfo = dragInfo;
+                              });
+                            },
+                            onDockDragEnded: () {
+                              _hoverTimer?.cancel();
+                              _hoverTimer = null;
+                              setState(() {
+                                _isGlobalDragging = false;
+                                _activeDragInfo = null;
+                                _hoveredSlot = null;
+                              });
+                              _pageTurnTimer?.cancel();
+                              _saveDockLayout();
+                            },
+                            onDockDrop: _handleDockDrop,
+                            onDockHover: _handleDockHover,
+                            onDockLeave: _handleDockLeave,
+                            forcedInitialOffsets: _dockInitialOffsets,
+                            activeDragInfo: _activeDragInfo,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
