@@ -9,9 +9,12 @@ import 'wiggle_wrapper.dart';
 import 'clock_widget.dart';
 import 'weather_widget.dart';
 import 'battery_widget.dart';
+import 'app_library.dart';
 
 class AppGrid extends StatelessWidget {
   final List<GridItem> gridApps;
+  final List<AppInfo> allApps;
+  final Map<String, int> launchCounts;
   final int totalPages;
   final PageController pageController;
   final GridDragInfo? activeDragInfo;
@@ -33,6 +36,8 @@ class AppGrid extends StatelessWidget {
   const AppGrid({
     super.key,
     required this.gridApps,
+    required this.allApps,
+    required this.launchCounts,
     required this.totalPages,
     required this.pageController,
     required this.activeDragInfo,
@@ -61,8 +66,15 @@ class AppGrid extends StatelessWidget {
       physics: activeDragInfo != null
           ? const NeverScrollableScrollPhysics()
           : const BouncingScrollPhysics(),
-      itemCount: totalPages,
+      itemCount: totalPages + 1,
       itemBuilder: (context, pageIndex) {
+        if (pageIndex == totalPages) {
+          return AppLibrary(
+            apps: allApps,
+            launchCounts: launchCounts,
+            onAppTap: onAppTap,
+          );
+        }
         return _AppGridPage(
           pageIndex: pageIndex,
           gridApps: gridApps,

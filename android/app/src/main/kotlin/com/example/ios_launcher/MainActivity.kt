@@ -23,6 +23,7 @@ import android.graphics.Shader
 import android.graphics.Paint
 import java.io.File
 import java.io.FileOutputStream
+import io.flutter.FlutterInjector
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.ios_launcher/apps"
@@ -98,13 +99,12 @@ class MainActivity : FlutterActivity() {
                 "setAssetWallpaper" -> {
                     val assetPath = call.argument<String>("assetPath")
                     if (assetPath != null) {
-                        val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().apply {
-                            putString("wallpaper_type", "asset")
-                            putString("wallpaper_image_path", assetPath)
-                            apply()
-                        }
-                        result.success(true)
+                        Thread {
+                            val success = setAssetWallpaper(assetPath)
+                            runOnUiThread {
+                                result.success(success)
+                            }
+                        }.start()
                     } else {
                         result.error("INVALID_ARGS", "Asset path is null", null)
                     }
@@ -345,6 +345,27 @@ class MainActivity : FlutterActivity() {
             true
         } catch (e: Exception) {
             android.util.Log.e("ios_launcher", "Failed to set gradient wallpaper: ${e.message}", e)
+            false
+        }
+    }
+
+    private fun setAssetWallpaper(assetPath: String): Boolean {
+        return try {
+            val loader = FlutterInjector.instance().flutterLoader()
+            val lookupKey = loader.getLookupKeyForAsset(assetPath)
+            assets.open(lookupKey).use { inputStream ->
+                WallpaperManager.getInstance(applicationContext).setStream(inputStream)
+            }
+            
+            val prefs = getSharedPreferences("ios_launcher_prefs", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putString("wallpaper_type", "asset")
+                putString("wallpaper_image_path", assetPath)
+                apply()
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("ios_launcher", "Failed to set asset wallpaper: ${e.message}", e)
             false
         }
     }

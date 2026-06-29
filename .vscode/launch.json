@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ios_launcher (Flutter sdk gphone64 arm64)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "emulator-5554"
+    },
+    {
+      "name": "ios_launcher (iPhone 16 Pro Max)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "99BC6B9E-7089-44DE-9370-FFE85A995F33"
+    },
+    {
+      "name": "ios_launcher (macOS)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "macos"
+    },
+    {
+      "name": "ios_launcher (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome"
+    }
+  ]
+}

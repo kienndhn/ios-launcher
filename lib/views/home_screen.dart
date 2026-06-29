@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:ios_launcher/widgets/widget_selector.dart';
 import '../models/app_info.dart';
 import '../models/grid_item.dart';
 import '../utils/grid_utils.dart';
@@ -23,10 +24,14 @@ class _HomeScreenState extends State<HomeScreen>
 
   // Configurable hold delays
   static const Duration dragDelay = Duration(milliseconds: 500);
-  static const Duration popupDelay = Duration(milliseconds: 1000); // Always dragDelay * 2
+  static const Duration popupDelay = Duration(
+    milliseconds: 1000,
+  ); // Always dragDelay * 2
 
   List<AppInfo> dockApps = [];
   List<GridItem> gridApps = [];
+  List<AppInfo> allApps = [];
+  Map<String, int> _launchCounts = {};
   bool isLoading = true;
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -52,7 +57,11 @@ class _HomeScreenState extends State<HomeScreen>
   AppGridItem? _displacedDockAppItem;
   Map<String, Offset> _displacedInitialOffsets = {};
   Map<String, Offset> _dockInitialOffsets = {};
-  final AppInfo _dockDummyApp = AppInfo(packageName: 'dock_dummy', label: '', icon: Uint8List(0));
+  final AppInfo _dockDummyApp = AppInfo(
+    packageName: 'dock_dummy',
+    label: '',
+    icon: Uint8List(0),
+  );
   Offset? _launchStartBounds;
   Size? _launchStartSize;
   late AnimationController _launchAnimationController;
@@ -71,7 +80,36 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _initializeData() async {
     await _loadWallpaperSettings();
     await _loadWidgetSettings();
+    _launchCounts = await _loadLaunchCounts();
     await _loadApps();
+  }
+
+  Future<Map<String, int>> _loadLaunchCounts() async {
+    try {
+      final file = File('/data/data/com.example.ios_launcher/files/launch_counts.json');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final Map<String, dynamic> jsonMap = jsonDecode(content);
+        return jsonMap.map((key, value) => MapEntry(key, value as int));
+      }
+    } catch (e) {
+      print("Error loading launch counts: $e");
+    }
+    return {};
+  }
+
+  Future<void> _recordAppLaunch(String packageName) async {
+    try {
+      final file = File('/data/data/com.example.ios_launcher/files/launch_counts.json');
+      _launchCounts[packageName] = (_launchCounts[packageName] ?? 0) + 1;
+      await file.parent.create(recursive: true);
+      await file.writeAsString(jsonEncode(_launchCounts));
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      print("Error saving launch counts: $e");
+    }
   }
 
   @override
@@ -202,10 +240,11 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-
   Future<void> _loadApps() async {
     try {
-      final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
+      final List<dynamic> result = await platform.invokeMethod(
+        'getInstalledApps',
+      );
       final List<AppInfo> loaded = result.map((app) {
         final map = app as Map<dynamic, dynamic>;
         return AppInfo(
@@ -238,7 +277,9 @@ class _HomeScreenState extends State<HomeScreen>
 
       List<String> savedLayout = [];
       try {
-        final List<dynamic>? layoutResult = await platform.invokeMethod('getGridLayout');
+        final List<dynamic>? layoutResult = await platform.invokeMethod(
+          'getGridLayout',
+        );
         if (layoutResult != null) {
           savedLayout = List<String>.from(layoutResult);
         }
@@ -248,7 +289,9 @@ class _HomeScreenState extends State<HomeScreen>
 
       List<String> savedDockLayout = [];
       try {
-        final List<dynamic>? dockResult = await platform.invokeMethod('getDockLayout');
+        final List<dynamic>? dockResult = await platform.invokeMethod(
+          'getDockLayout',
+        );
         if (dockResult != null) {
           savedDockLayout = List<String>.from(dockResult);
         }
@@ -339,13 +382,21 @@ class _HomeScreenState extends State<HomeScreen>
       // Xếp các ứng dụng mới vào các ô trống còn lại
       for (final app in appMap.values) {
         final emptySlot = findFirstEmptySlot(tempGrid, 1, 1);
-        tempGrid.add(AppGridItem(app, page: emptySlot.page, row: emptySlot.row, col: emptySlot.col));
+        tempGrid.add(
+          AppGridItem(
+            app,
+            page: emptySlot.page,
+            row: emptySlot.row,
+            col: emptySlot.col,
+          ),
+        );
       }
 
       // Giải quyết va chạm ô lưới nếu có
       resolveOverlaps(tempGrid);
 
       setState(() {
+        allApps = loaded;
         gridApps = tempGrid;
         isLoading = false;
       });
@@ -370,8 +421,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _saveGridLayout() async {
     try {
-      final List<String> layoutIds =
-          gridApps.map((item) => '${item.id}:${item.page}:${item.row}:${item.col}').toList();
+      final List<String> layoutIds = gridApps
+          .map((item) => '${item.id}:${item.page}:${item.row}:${item.col}')
+          .toList();
       await platform.invokeMethod('saveGridLayout', {'layout': layoutIds});
     } catch (e) {
       print("Failed to save grid layout: $e");
@@ -380,7 +432,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _saveDockLayout() async {
     try {
-      final List<String> layoutIds = dockApps.map((app) => app.packageName).toList();
+      final List<String> layoutIds = dockApps
+          .map((app) => app.packageName)
+          .toList();
       await platform.invokeMethod('saveDockLayout', {'layout': layoutIds});
     } catch (e) {
       print("Failed to save dock layout: $e");
@@ -394,7 +448,14 @@ class _HomeScreenState extends State<HomeScreen>
       );
       if (!exists) {
         final slot = findFirstEmptySlot(gridApps, 2, 2);
-        gridApps.add(WidgetGridItem(widgetId, page: slot.page, row: slot.row, col: slot.col));
+        gridApps.add(
+          WidgetGridItem(
+            widgetId,
+            page: slot.page,
+            row: slot.row,
+            col: slot.col,
+          ),
+        );
       }
     } else {
       gridApps.removeWhere(
@@ -501,7 +562,9 @@ class _HomeScreenState extends State<HomeScreen>
                           Expanded(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () => Navigator.of(context).pop(),
@@ -523,15 +586,21 @@ class _HomeScreenState extends State<HomeScreen>
                           Expanded(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () async {
                                 Navigator.of(context).pop();
                                 try {
-                                  await platform.invokeMethod('openDefaultLauncherSettings');
+                                  await platform.invokeMethod(
+                                    'openDefaultLauncherSettings',
+                                  );
                                 } on PlatformException catch (e) {
-                                  print("Failed to open launcher settings: '${e.message}'.");
+                                  print(
+                                    "Failed to open launcher settings: '${e.message}'.",
+                                  );
                                 }
                               },
                               child: const Text(
@@ -572,7 +641,7 @@ class _HomeScreenState extends State<HomeScreen>
       _activeDragInfo = null;
       _hoveredSlot = null;
     });
-    
+
     final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
     final bgColor = themeExt.dialogBgColor;
     final borderColor = themeExt.borderColor;
@@ -597,10 +666,7 @@ class _HomeScreenState extends State<HomeScreen>
                   decoration: BoxDecoration(
                     color: bgColor,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: borderColor,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: borderColor, width: 0.5),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -632,16 +698,15 @@ class _HomeScreenState extends State<HomeScreen>
                         ),
                       ),
                       const SizedBox(height: 20),
-                      Container(
-                        height: 0.5,
-                        color: dividerColor,
-                      ),
+                      Container(height: 0.5, color: dividerColor),
                       Row(
                         children: [
                           Expanded(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () => Navigator.of(context).pop(),
@@ -663,7 +728,9 @@ class _HomeScreenState extends State<HomeScreen>
                           Expanded(
                             child: TextButton(
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () {
@@ -697,14 +764,19 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  void _showAppContextMenu(BuildContext context, Offset position, AppInfo app, int globalIndex) {
+  void _showAppContextMenu(
+    BuildContext context,
+    Offset position,
+    AppInfo app,
+    int globalIndex,
+  ) {
     setState(() {
       _isContextMenuOpen = true;
       _isGlobalDragging = false;
       _activeDragInfo = null;
       _hoveredSlot = null;
     });
-    
+
     final themeExt = Theme.of(context).extension<LauncherThemeExtension>()!;
     final bgColor = themeExt.menuBgColor;
     final borderColor = themeExt.borderColor;
@@ -767,10 +839,7 @@ class _HomeScreenState extends State<HomeScreen>
                           decoration: BoxDecoration(
                             color: bgColor,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: borderColor,
-                              width: 0.5,
-                            ),
+                            border: Border.all(color: borderColor, width: 0.5),
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -790,7 +859,8 @@ class _HomeScreenState extends State<HomeScreen>
                                     vertical: 12,
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Sửa Màn hình chính',
@@ -810,10 +880,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   ),
                                 ),
                               ),
-                              Container(
-                                height: 0.5,
-                                color: dividerColor,
-                              ),
+                              Container(height: 0.5, color: dividerColor),
                               GestureDetector(
                                 onTap: () {
                                   overlayEntry.remove();
@@ -829,7 +896,8 @@ class _HomeScreenState extends State<HomeScreen>
                                     vertical: 12,
                                   ),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Xóa ứng dụng',
@@ -884,7 +952,7 @@ class _HomeScreenState extends State<HomeScreen>
     final dy = event.position.dy;
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    
+
     // Nếu đang kéo ở khu vực dock thì không cho phép chuyển trang
     if (dy > screenHeight - 140) {
       _pageTurnTimer?.cancel();
@@ -937,6 +1005,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   void _animateAppLaunch(AppInfo app, Offset position, Size size) {
     if (_launchingApp != null) return;
+    _recordAppLaunch(app.packageName);
     setState(() {
       _launchingApp = app;
       _launchStartBounds = position;
@@ -984,7 +1053,9 @@ class _HomeScreenState extends State<HomeScreen>
         resolveOverlaps(gridApps, fixedId: dragItem.id);
         _saveDockLayout();
       } else {
-        final gridItemIndex = gridApps.indexWhere((item) => item.id == dragItem.id);
+        final gridItemIndex = gridApps.indexWhere(
+          (item) => item.id == dragItem.id,
+        );
         if (gridItemIndex != -1) {
           gridApps[gridItemIndex].page = targetSlot.page;
           gridApps[gridItemIndex].row = targetRowClamped;
@@ -1003,10 +1074,12 @@ class _HomeScreenState extends State<HomeScreen>
     if (dragInfo.startPage != -1) {
       bool changed = false;
 
-      if (_displacedDockAppItem == null && dockApps.length == 4 && !dockApps.contains(_dockDummyApp)) {
+      if (_displacedDockAppItem == null &&
+          dockApps.length == 4 &&
+          !dockApps.contains(_dockDummyApp)) {
         final displacedApp = dockApps.removeAt(targetIndex.clamp(0, 3));
         final draggedItem = dragInfo.item as AppGridItem;
-        
+
         _displacedDockAppItem = AppGridItem(
           displacedApp,
           page: draggedItem.page,
@@ -1019,17 +1092,20 @@ class _HomeScreenState extends State<HomeScreen>
         final screenHeight = MediaQuery.of(context).size.height;
         final safeAreaTop = MediaQuery.of(context).padding.top;
         final gap = (screenWidth - 32 - 240) / 5;
-        
+
         // Global dock item position
         final dockGlobalX = 16.0 + gap + targetIndex * (60.0 + gap);
         final dockGlobalY = screenHeight - 110.0;
-        
+
         // Convert to AppGrid local coordinates
         final startX = dockGlobalX - 22.0;
         final startY = dockGlobalY - (safeAreaTop + 32.0);
 
         _displacedInitialOffsets = Map.from(_displacedInitialOffsets);
-        _displacedInitialOffsets[_displacedDockAppItem!.id] = Offset(startX, startY);
+        _displacedInitialOffsets[_displacedDockAppItem!.id] = Offset(
+          startX,
+          startY,
+        );
 
         changed = true;
       }
@@ -1045,7 +1121,9 @@ class _HomeScreenState extends State<HomeScreen>
     } else {
       bool changed = false;
       final draggedAppId = dragInfo.item.id;
-      final currentIndex = dockApps.indexWhere((app) => app.packageName == draggedAppId);
+      final currentIndex = dockApps.indexWhere(
+        (app) => app.packageName == draggedAppId,
+      );
       if (currentIndex != -1 && currentIndex != targetIndex) {
         final appToMove = dockApps.removeAt(currentIndex);
         dockApps.insert(targetIndex.clamp(0, dockApps.length), appToMove);
@@ -1065,15 +1143,15 @@ class _HomeScreenState extends State<HomeScreen>
       final gridPos = _displacedDockAppItem!;
       final screenHeight = MediaQuery.of(context).size.height;
       final safeAreaTop = MediaQuery.of(context).padding.top;
-      
+
       // Global grid item position
       final gridGlobalX = 22.0 + gridPos.col * 72.0;
       final gridGlobalY = safeAreaTop + 32.0 + gridPos.row * 70.0;
-      
+
       // Convert to Dock local coordinates
       final startX = gridGlobalX - 16.0;
       final startY = gridGlobalY - (screenHeight - 110.0);
-      
+
       _dockInitialOffsets = Map.from(_dockInitialOffsets);
       _dockInitialOffsets[gridPos.app.packageName] = Offset(startX, startY);
 
@@ -1096,7 +1174,9 @@ class _HomeScreenState extends State<HomeScreen>
       _hoveredSlot = null;
 
       if (dragInfo.startPage == -1) {
-        final appIndex = dockApps.indexWhere((app) => app.packageName == dragInfo.item.id);
+        final appIndex = dockApps.indexWhere(
+          (app) => app.packageName == dragInfo.item.id,
+        );
         if (appIndex != -1) {
           final app = dockApps.removeAt(appIndex);
           if (targetIndex > appIndex) {
@@ -1110,14 +1190,21 @@ class _HomeScreenState extends State<HomeScreen>
           gridApps.removeWhere((item) => item.id == dragInfo.item.id);
 
           dockApps.remove(_dockDummyApp);
-          
+
           if (_displacedDockAppItem != null) {
             resolveOverlaps(gridApps);
             _displacedDockAppItem = null;
           } else if (dockApps.length >= 4) {
             final displacedApp = dockApps.removeLast();
             final draggedItem = dragInfo.item as AppGridItem;
-            gridApps.add(AppGridItem(displacedApp, page: draggedItem.page, row: draggedItem.row, col: draggedItem.col));
+            gridApps.add(
+              AppGridItem(
+                displacedApp,
+                page: draggedItem.page,
+                row: draggedItem.row,
+                col: draggedItem.col,
+              ),
+            );
             resolveOverlaps(gridApps);
           }
 
@@ -1167,12 +1254,14 @@ class _HomeScreenState extends State<HomeScreen>
                   final scale = 1.0 - 0.05 * curve;
 
                   Widget wallpaperWidget;
-                  if (_wallpaperType == 'image' && _wallpaperImagePath != null) {
+                  if (_wallpaperType == 'image' &&
+                      _wallpaperImagePath != null) {
                     wallpaperWidget = Image.file(
                       File(_wallpaperImagePath!),
                       fit: BoxFit.cover,
                     );
-                  } else if (_wallpaperType == 'asset' && _wallpaperImagePath != null) {
+                  } else if (_wallpaperType == 'asset' &&
+                      _wallpaperImagePath != null) {
                     wallpaperWidget = Image.asset(
                       _wallpaperImagePath!,
                       fit: BoxFit.cover,
@@ -1190,6 +1279,37 @@ class _HomeScreenState extends State<HomeScreen>
                   }
 
                   return Transform.scale(scale: scale, child: wallpaperWidget);
+                },
+              ),
+            ),
+
+            // Fullscreen Background Blur for App Library
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _pageController,
+                builder: (context, child) {
+                  double blurAmount = 0.0;
+                  double tintOpacity = 0.0;
+                  if (_pageController.hasClients) {
+                    final page = _pageController.page ?? 0.0;
+                    final threshold = displayTotalPages - 1;
+                    if (page > threshold) {
+                      final factor = (page - threshold).clamp(0.0, 1.0);
+                      blurAmount = factor * 20.0;
+                      tintOpacity = factor * (isDarkMode ? 0.20 : 0.05);
+                    }
+                  }
+                  if (blurAmount == 0.0) {
+                    return const SizedBox.shrink();
+                  }
+                  return ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+                      child: Container(
+                        color: Colors.black.withOpacity(tintOpacity),
+                      ),
+                    ),
+                  );
                 },
               ),
             ),
@@ -1214,61 +1334,100 @@ class _HomeScreenState extends State<HomeScreen>
                     const SizedBox(height: 16),
                     // Dock
                     if (!isLoading && dockApps.isNotEmpty)
-                      Dock(
-                        apps: dockApps,
-                        onAppTap: _animateAppLaunch,
-                        isEditingMode: _isEditingMode,
-                        popupDelay: popupDelay,
-                        dragDelay: dragDelay,
-                        onAppLongPress: _showAppContextMenu,
-                        onAppDeleteTap: _showDeleteConfirmation,
-                        onDockDragStarted: (dragInfo) {
-                          setState(() {
-                            _isGlobalDragging = true;
-                            _activeDragInfo = dragInfo;
-                          });
+                      AnimatedBuilder(
+                        animation: _pageController,
+                        builder: (context, child) {
+                          double opacity = 1.0;
+                          double offsetMultiplier = 0.0;
+                          if (_pageController.hasClients) {
+                            final page = _pageController.page ?? 0.0;
+                            final threshold = displayTotalPages - 1;
+                            if (page > threshold) {
+                              opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
+                              offsetMultiplier = (page - threshold).clamp(0.0, 1.0);
+                            }
+                          }
+                          return Opacity(
+                            opacity: opacity,
+                            child: Transform.translate(
+                              offset: Offset(0, 100 * offsetMultiplier),
+                              child: child,
+                            ),
+                          );
                         },
-                        onDockDragEnded: () {
-                          _hoverTimer?.cancel();
-                          _hoverTimer = null;
-                          setState(() {
-                            _isGlobalDragging = false;
-                            _activeDragInfo = null;
-                            _hoveredSlot = null;
-                          });
-                          _pageTurnTimer?.cancel();
-                          _saveDockLayout();
-                        },
-                        onDockDrop: _handleDockDrop,
-                        onDockHover: _handleDockHover,
-                        onDockLeave: _handleDockLeave,
-                        forcedInitialOffsets: _dockInitialOffsets,
-                        activeDragInfo: _activeDragInfo,
+                        child: Dock(
+                          apps: dockApps,
+                          onAppTap: _animateAppLaunch,
+                          isEditingMode: _isEditingMode,
+                          popupDelay: popupDelay,
+                          dragDelay: dragDelay,
+                          onAppLongPress: _showAppContextMenu,
+                          onAppDeleteTap: _showDeleteConfirmation,
+                          onDockDragStarted: (dragInfo) {
+                            setState(() {
+                              _isGlobalDragging = true;
+                              _activeDragInfo = dragInfo;
+                            });
+                          },
+                          onDockDragEnded: () {
+                            _hoverTimer?.cancel();
+                            _hoverTimer = null;
+                            setState(() {
+                              _isGlobalDragging = false;
+                              _activeDragInfo = null;
+                              _hoveredSlot = null;
+                            });
+                            _pageTurnTimer?.cancel();
+                            _saveDockLayout();
+                          },
+                          onDockDrop: _handleDockDrop,
+                          onDockHover: _handleDockHover,
+                          onDockLeave: _handleDockLeave,
+                          forcedInitialOffsets: _dockInitialOffsets,
+                          activeDragInfo: _activeDragInfo,
+                        ),
                       ),
-                    
+
                     // Paging indicators
                     if (!isLoading)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(
-                          displayTotalPages,
-                          (index) => Container(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 16,
-                            ),
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: index == _currentPage
-                                  ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
+                      AnimatedBuilder(
+                        animation: _pageController,
+                        builder: (context, child) {
+                          double opacity = 1.0;
+                          if (_pageController.hasClients) {
+                            final page = _pageController.page ?? 0.0;
+                            final threshold = displayTotalPages - 1;
+                            if (page > threshold) {
+                              opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
+                            }
+                          }
+                          return Opacity(
+                            opacity: opacity,
+                            child: child,
+                          );
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(
+                            displayTotalPages,
+                            (index) => Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 16,
+                              ),
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: index == _currentPage
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.4),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    
+
                     Expanded(
                       child: Listener(
                         onPointerMove: _handlePointerMove,
@@ -1280,6 +1439,8 @@ class _HomeScreenState extends State<HomeScreen>
                               )
                             : AppGrid(
                                 gridApps: gridApps,
+                                allApps: allApps,
+                                launchCounts: _launchCounts,
                                 totalPages: displayTotalPages,
                                 pageController: _pageController,
                                 activeDragInfo: _activeDragInfo,
@@ -1312,7 +1473,8 @@ class _HomeScreenState extends State<HomeScreen>
                                   _saveGridLayout();
                                 },
                                 onHoverChanged: (slot) {
-                                  if (_activeDragInfo == null || slot == null) return;
+                                  if (_activeDragInfo == null || slot == null)
+                                    return;
                                   if (_hoveredSlot != null &&
                                       _hoveredSlot!.page == slot.page &&
                                       _hoveredSlot!.row == slot.row &&
@@ -1324,19 +1486,34 @@ class _HomeScreenState extends State<HomeScreen>
                                   });
 
                                   _hoverTimer?.cancel();
-                                  _hoverTimer = Timer(const Duration(milliseconds: 400), () {
-                                    if (!mounted || _activeDragInfo == null || _hoveredSlot == null) return;
-                                    setState(() {
-                                      final dragItem = _activeDragInfo!.item;
-                                      final gridItemIndex = gridApps.indexWhere((item) => item.id == dragItem.id);
-                                      if (gridItemIndex != -1) {
-                                        gridApps[gridItemIndex].page = _hoveredSlot!.page;
-                                        gridApps[gridItemIndex].row = _hoveredSlot!.row;
-                                        gridApps[gridItemIndex].col = _hoveredSlot!.col;
-                                        resolveOverlaps(gridApps, fixedId: dragItem.id);
-                                      }
-                                    });
-                                  });
+                                  _hoverTimer = Timer(
+                                    const Duration(milliseconds: 400),
+                                    () {
+                                      if (!mounted ||
+                                          _activeDragInfo == null ||
+                                          _hoveredSlot == null)
+                                        return;
+                                      setState(() {
+                                        final dragItem = _activeDragInfo!.item;
+                                        final gridItemIndex = gridApps
+                                            .indexWhere(
+                                              (item) => item.id == dragItem.id,
+                                            );
+                                        if (gridItemIndex != -1) {
+                                          gridApps[gridItemIndex].page =
+                                              _hoveredSlot!.page;
+                                          gridApps[gridItemIndex].row =
+                                              _hoveredSlot!.row;
+                                          gridApps[gridItemIndex].col =
+                                              _hoveredSlot!.col;
+                                          resolveOverlaps(
+                                            gridApps,
+                                            fixedId: dragItem.id,
+                                          );
+                                        }
+                                      });
+                                    },
+                                  );
                                 },
                                 onDrop: _handleDrop,
                                 onAppLongPress: _showAppContextMenu,
@@ -1366,10 +1543,14 @@ class _HomeScreenState extends State<HomeScreen>
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: isDarkMode ? Colors.black.withOpacity(0.35) : Colors.white.withOpacity(0.6),
+                          color: isDarkMode
+                              ? Colors.black.withOpacity(0.35)
+                              : Colors.white.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.15),
+                            color: isDarkMode
+                                ? Colors.white.withOpacity(0.15)
+                                : Colors.black.withOpacity(0.15),
                             width: 0.8,
                           ),
                         ),
@@ -1385,7 +1566,9 @@ class _HomeScreenState extends State<HomeScreen>
                             Container(
                               height: 24,
                               width: 1,
-                              color: isDarkMode ? Colors.white24 : Colors.black26,
+                              color: isDarkMode
+                                  ? Colors.white24
+                                  : Colors.black26,
                               margin: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
@@ -1513,7 +1696,7 @@ class _HomeScreenState extends State<HomeScreen>
     final textColor = themeExt.textColor;
     final dividerColor = themeExt.dividerColor;
     final borderColor = themeExt.borderColor;
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1534,10 +1717,7 @@ class _HomeScreenState extends State<HomeScreen>
                   topLeft: Radius.circular(28),
                   topRight: Radius.circular(28),
                 ),
-                border: Border.all(
-                  color: borderColor,
-                  width: 0.5,
-                ),
+                border: Border.all(color: borderColor, width: 0.5),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1569,7 +1749,14 @@ class _HomeScreenState extends State<HomeScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Màu sắc', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          Text(
+                            'Màu sắc',
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 120,
@@ -1579,8 +1766,12 @@ class _HomeScreenState extends State<HomeScreen>
                                 // Gallery Picker Card
                                 Builder(
                                   builder: (context) {
-                                    final iconBgColor = isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
-                                    final subTextColor = isDarkMode ? Colors.white70 : Colors.black54;
+                                    final iconBgColor = isDarkMode
+                                        ? Colors.white.withOpacity(0.08)
+                                        : Colors.black.withOpacity(0.05);
+                                    final subTextColor = isDarkMode
+                                        ? Colors.white70
+                                        : Colors.black54;
                                     return GestureDetector(
                                       onTap: () {
                                         Navigator.pop(context);
@@ -1588,17 +1779,24 @@ class _HomeScreenState extends State<HomeScreen>
                                       },
                                       child: Container(
                                         width: 80,
-                                        margin: const EdgeInsets.only(right: 12),
+                                        margin: const EdgeInsets.only(
+                                          right: 12,
+                                        ),
                                         decoration: BoxDecoration(
                                           color: iconBgColor,
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           border: Border.all(
-                                            color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.1),
+                                            color: isDarkMode
+                                                ? Colors.white.withOpacity(0.15)
+                                                : Colors.black.withOpacity(0.1),
                                             width: 0.8,
                                           ),
                                         ),
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             Icon(
                                               Icons.photo_library_outlined,
@@ -1619,58 +1817,135 @@ class _HomeScreenState extends State<HomeScreen>
                                         ),
                                       ),
                                     );
-                                  }
+                                  },
                                 ),
-                                _buildGradientOption(const Color(0xFF1D2671), const Color(0xFFC33764), 'iOS Classic'),
-                                _buildGradientOption(const Color(0xFF00B4DB), const Color(0xFF0083B0), 'Aurora'),
-                                _buildGradientOption(const Color(0xFFF12711), const Color(0xFFF5AF19), 'Sunset'),
-                                _buildGradientOption(const Color(0xFF0F2027), const Color(0xFF2C5364), 'Midnight'),
-                                _buildGradientOption(const Color(0xFF11998E), const Color(0xFF38EF7D), 'Emerald'),
+                                _buildGradientOption(
+                                  const Color(0xFF1D2671),
+                                  const Color(0xFFC33764),
+                                  'iOS Classic',
+                                ),
+                                _buildGradientOption(
+                                  const Color(0xFF00B4DB),
+                                  const Color(0xFF0083B0),
+                                  'Aurora',
+                                ),
+                                _buildGradientOption(
+                                  const Color(0xFFF12711),
+                                  const Color(0xFFF5AF19),
+                                  'Sunset',
+                                ),
+                                _buildGradientOption(
+                                  const Color(0xFF0F2027),
+                                  const Color(0xFF2C5364),
+                                  'Midnight',
+                                ),
+                                _buildGradientOption(
+                                  const Color(0xFF11998E),
+                                  const Color(0xFF38EF7D),
+                                  'Emerald',
+                                ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Text('Phong cảnh', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          Text(
+                            'Phong cảnh',
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 180,
                             child: ListView(
                               scrollDirection: Axis.horizontal,
                               children: [
-                                _buildAssetOption('assets/wallpapers/landscape_1.png', 'Biển'),
-                                _buildAssetOption('assets/wallpapers/landscape_2.png', 'Núi'),
+                                _buildAssetOption(
+                                  'assets/wallpapers/landscape_1.png',
+                                  'Biển',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/landscape_2.png',
+                                  'Núi',
+                                ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Text('Cây cối', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          Text(
+                            'Cây cối',
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 180,
                             child: ListView(
                               scrollDirection: Axis.horizontal,
                               children: [
-                                _buildAssetOption('assets/wallpapers/plant_1.png', 'Hoa'),
-                                _buildAssetOption('assets/wallpapers/plant_2.png', 'Trầu bà Nam Mỹ'),
-                                _buildAssetOption('assets/wallpapers/plant_3.png', 'Lá dương xỉ'),
-                                _buildAssetOption('assets/wallpapers/plant_4.png', 'Hoa Tulip'),
-                                _buildAssetOption('assets/wallpapers/plant_5.png', 'Cây trúc'),
-                                _buildAssetOption('assets/wallpapers/plant_6.png', 'Oải hương'),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_1.png',
+                                  'Hoa',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_2.png',
+                                  'Trầu bà Nam Mỹ',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_3.png',
+                                  'Lá dương xỉ',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_4.png',
+                                  'Hoa Tulip',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_5.png',
+                                  'Cây trúc',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/plant_6.png',
+                                  'Oải hương',
+                                ),
                               ],
                             ),
                           ),
                           const SizedBox(height: 20),
-                          Text('Khác', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          Text(
+                            'Khác',
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           SizedBox(
                             height: 180,
                             child: ListView(
                               scrollDirection: Axis.horizontal,
                               children: [
-                                _buildAssetOption('assets/wallpapers/other_1.png', 'Ảnh 1'),
-                                _buildAssetOption('assets/wallpapers/other_2.png', 'Ảnh 2'),
-                                _buildAssetOption('assets/wallpapers/other_3.png', 'Ảnh 3'),
-                                _buildAssetOption('assets/wallpapers/other_4.png', 'Ảnh 4'),
+                                _buildAssetOption(
+                                  'assets/wallpapers/other_1.png',
+                                  'Ảnh 1',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/other_2.png',
+                                  'Ảnh 2',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/other_3.png',
+                                  'Ảnh 3',
+                                ),
+                                _buildAssetOption(
+                                  'assets/wallpapers/other_4.png',
+                                  'Ảnh 4',
+                                ),
                               ],
                             ),
                           ),
@@ -1706,7 +1981,9 @@ class _HomeScreenState extends State<HomeScreen>
           border: Border.all(
             color: isSelected
                 ? const Color(0xFF0A84FF)
-                : (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
+                : (isDarkMode
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.black.withOpacity(0.1)),
             width: isSelected ? 2.0 : 0.8,
           ),
           gradient: LinearGradient(
@@ -1744,7 +2021,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   Widget _buildAssetOption(String assetPath, String label) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final isSelected = _wallpaperType == 'asset' && _wallpaperImagePath == assetPath;
+    final isSelected =
+        _wallpaperType == 'asset' && _wallpaperImagePath == assetPath;
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
@@ -1758,7 +2036,9 @@ class _HomeScreenState extends State<HomeScreen>
           border: Border.all(
             color: isSelected
                 ? const Color(0xFF0A84FF)
-                : (isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1)),
+                : (isDarkMode
+                      ? Colors.white.withOpacity(0.1)
+                      : Colors.black.withOpacity(0.1)),
             width: isSelected ? 2.0 : 0.8,
           ),
           image: DecorationImage(
@@ -1823,10 +2103,7 @@ class _HomeScreenState extends State<HomeScreen>
                       topLeft: Radius.circular(28),
                       topRight: Radius.circular(28),
                     ),
-                    border: Border.all(
-                      color: borderColor,
-                      width: 0.5,
-                    ),
+                    border: Border.all(color: borderColor, width: 0.5),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
