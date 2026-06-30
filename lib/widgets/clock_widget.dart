@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'liquid_glass_container.dart';
 
 class ClockWidget extends StatefulWidget {
   const ClockWidget({super.key});
@@ -48,13 +49,7 @@ class _ClockWidgetState extends State<ClockWidget> {
     final dayName = daysOfWeek[_now.weekday % 7];
     final dateStr = '$dayName, ${_now.day} thg ${_now.month}';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.8),
-      ),
+    return AnimatedLiquidGlassContainer(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:ios_launcher/models/app_info.dart';
 import 'package:ios_launcher/utils/theme.dart';
 import 'app_icon.dart';
+import 'liquid_glass_container.dart';
 
 class AppLibrary extends StatefulWidget {
   final List<AppInfo> apps;
@@ -369,20 +370,11 @@ class _AppLibraryState extends State<AppLibrary> {
             Expanded(
               child: AspectRatio(
                 aspectRatio: 1,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? Colors.white.withOpacity(0.07)
-                        : Colors.black.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.08)
-                          : Colors.black.withOpacity(0.05),
-                      width: 0.5,
-                    ),
-                  ),
+                child: LiquidGlassContainer(
                   padding: const EdgeInsets.all(12),
+                  glassColor: isDarkMode
+                      ? const Color(0x10FFFFFF)
+                      : const Color(0x08000000),
                   child: _buildCategoryItemGrid(catName, catApps, context),
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'liquid_glass_container.dart';
 
 class BatteryWidget extends StatefulWidget {
   const BatteryWidget({super.key});
@@ -46,13 +47,7 @@ class _BatteryWidgetState extends State<BatteryWidget> {
   Widget build(BuildContext context) {
     final isCharging = _batteryLevel < 100;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.8),
-      ),
+    return AnimatedLiquidGlassContainer(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

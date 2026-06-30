@@ -6,6 +6,7 @@ import '../models/app_info.dart';
 import '../models/grid_item.dart';
 import 'app_icon.dart';
 import 'wiggle_wrapper.dart';
+import 'liquid_glass_container.dart';
 
 class Dock extends StatefulWidget {
   final List<AppInfo> apps;
@@ -22,6 +23,7 @@ class Dock extends StatefulWidget {
   final VoidCallback onDockLeave;
   final Map<String, Offset>? forcedInitialOffsets;
   final GridDragInfo? activeDragInfo;
+  final double opacity;
 
   const Dock({
     Key? key,
@@ -39,6 +41,7 @@ class Dock extends StatefulWidget {
     required this.onDockLeave,
     this.forcedInitialOffsets,
     this.activeDragInfo,
+    this.opacity = 1.0,
   }) : super(key: key);
 
   @override
@@ -89,8 +92,23 @@ class _DockState extends State<Dock> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  filter: ImageFilter.blur(
+                    sigmaX: 18,
+                    sigmaY: 18,
+                  ),
                   child: Container(color: Colors.transparent),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: CustomPaint(
+                  painter: LiquidGlassHighlightPainter(
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
@@ -122,8 +140,10 @@ class _DockState extends State<Dock> {
                 widget.onDockDrop(details.data, index);
               },
               builder: (context, candidateData, rejectedData) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                return Opacity(
+                  opacity: widget.opacity,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.maxWidth;
@@ -215,8 +235,9 @@ class _DockState extends State<Dock> {
                       );
                     },
                   ),
-                );
-              },
+                ),
+              );
+            },
             ),
           ),
         ],

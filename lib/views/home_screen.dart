@@ -1492,45 +1492,42 @@ class _HomeScreenState extends State<HomeScreen>
                                 offsetMultiplier = (page - threshold).clamp(0.0, 1.0);
                               }
                             }
-                            return Opacity(
-                              opacity: opacity,
-                              child: Transform.translate(
-                                offset: Offset(0, 100 * offsetMultiplier),
-                                child: child,
+                            return Transform.translate(
+                              offset: Offset(0, 160 * offsetMultiplier),
+                              child: Dock(
+                                apps: dockApps,
+                                opacity: opacity,
+                                onAppTap: _animateAppLaunch,
+                                isEditingMode: _isEditingMode,
+                                popupDelay: popupDelay,
+                                dragDelay: dragDelay,
+                                onAppLongPress: _showAppContextMenu,
+                                onAppDeleteTap: _showDeleteConfirmation,
+                                onDockDragStarted: (dragInfo) {
+                                  setState(() {
+                                    _isGlobalDragging = true;
+                                    _activeDragInfo = dragInfo;
+                                  });
+                                },
+                                onDockDragEnded: () {
+                                  _hoverTimer?.cancel();
+                                  _hoverTimer = null;
+                                  setState(() {
+                                    _isGlobalDragging = false;
+                                    _activeDragInfo = null;
+                                    _hoveredSlot = null;
+                                  });
+                                  _pageTurnTimer?.cancel();
+                                  _saveDockLayout();
+                                },
+                                onDockDrop: _handleDockDrop,
+                                onDockHover: _handleDockHover,
+                                onDockLeave: _handleDockLeave,
+                                forcedInitialOffsets: _dockInitialOffsets,
+                                activeDragInfo: _activeDragInfo,
                               ),
                             );
                           },
-                          child: Dock(
-                            apps: dockApps,
-                            onAppTap: _animateAppLaunch,
-                            isEditingMode: _isEditingMode,
-                            popupDelay: popupDelay,
-                            dragDelay: dragDelay,
-                            onAppLongPress: _showAppContextMenu,
-                            onAppDeleteTap: _showDeleteConfirmation,
-                            onDockDragStarted: (dragInfo) {
-                              setState(() {
-                                _isGlobalDragging = true;
-                                _activeDragInfo = dragInfo;
-                              });
-                            },
-                            onDockDragEnded: () {
-                              _hoverTimer?.cancel();
-                              _hoverTimer = null;
-                              setState(() {
-                                _isGlobalDragging = false;
-                                _activeDragInfo = null;
-                                _hoveredSlot = null;
-                              });
-                              _pageTurnTimer?.cancel();
-                              _saveDockLayout();
-                            },
-                            onDockDrop: _handleDockDrop,
-                            onDockHover: _handleDockHover,
-                            onDockLeave: _handleDockLeave,
-                            forcedInitialOffsets: _dockInitialOffsets,
-                            activeDragInfo: _activeDragInfo,
-                          ),
                         ),
                       ),
                   ],

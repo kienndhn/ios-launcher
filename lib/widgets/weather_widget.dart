@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
+import 'liquid_glass_container.dart';
 
 class WeatherWidget extends StatelessWidget {
   const WeatherWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return LiquidGlassContainer(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade400, Colors.blue.shade600],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.8),
-      ),
+      glassColor: Colors.blue.shade400.withValues(alpha: 0.35),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
