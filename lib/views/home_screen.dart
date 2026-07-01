@@ -1505,7 +1505,11 @@ class _HomeScreenState extends State<HomeScreen>
                               }
                             }
                             return Transform.translate(
-                              offset: Offset(0, 160 * offsetMultiplier),
+                              offset: Offset(
+                                -MediaQuery.of(context).size.width *
+                                    offsetMultiplier,
+                                0,
+                              ),
                               child: Dock(
                                 apps: dockApps,
                                 opacity: opacity,
