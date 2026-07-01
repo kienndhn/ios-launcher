@@ -372,9 +372,6 @@ class _AppLibraryState extends State<AppLibrary> {
                 aspectRatio: 1,
                 child: LiquidGlassContainer(
                   padding: const EdgeInsets.all(12),
-                  glassColor: isDarkMode
-                      ? const Color(0x10FFFFFF)
-                      : const Color(0x08000000),
                   child: _buildCategoryItemGrid(catName, catApps, context),
                 ),
               ),

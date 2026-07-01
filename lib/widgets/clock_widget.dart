@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'liquid_glass_container.dart';
 
 class ClockWidget extends StatefulWidget {
-  const ClockWidget({super.key});
+  final bool isFeedback;
+  const ClockWidget({super.key, this.isFeedback = false});
 
   @override
   State<ClockWidget> createState() => _ClockWidgetState();
@@ -50,6 +51,7 @@ class _ClockWidgetState extends State<ClockWidget> {
     final dateStr = '$dayName, ${_now.day} thg ${_now.month}';
 
     return AnimatedLiquidGlassContainer(
+      isFeedback: widget.isFeedback,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,

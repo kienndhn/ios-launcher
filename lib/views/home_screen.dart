@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:ios_launcher/widgets/widget_selector.dart';
 import '../models/app_info.dart';
 import '../models/grid_item.dart';
 import '../utils/grid_utils.dart';
@@ -87,7 +86,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<Map<String, int>> _loadLaunchCounts() async {
     try {
-      final file = File('/data/data/com.example.ios_launcher/files/launch_counts.json');
+      final file = File(
+        '/data/data/com.example.ios_launcher/files/launch_counts.json',
+      );
       if (await file.exists()) {
         final content = await file.readAsString();
         final Map<String, dynamic> jsonMap = jsonDecode(content);
@@ -101,7 +102,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _recordAppLaunch(String packageName) async {
     try {
-      final file = File('/data/data/com.example.ios_launcher/files/launch_counts.json');
+      final file = File(
+        '/data/data/com.example.ios_launcher/files/launch_counts.json',
+      );
       _launchCounts[packageName] = (_launchCounts[packageName] ?? 0) + 1;
       await file.parent.create(recursive: true);
       await file.writeAsString(jsonEncode(_launchCounts));
@@ -1305,7 +1308,10 @@ class _HomeScreenState extends State<HomeScreen>
                   }
                   return ClipRect(
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: blurAmount, sigmaY: blurAmount),
+                      filter: ImageFilter.blur(
+                        sigmaX: blurAmount,
+                        sigmaY: blurAmount,
+                      ),
                       child: Container(
                         color: Colors.black.withOpacity(tintOpacity),
                       ),
@@ -1442,13 +1448,13 @@ class _HomeScreenState extends State<HomeScreen>
                               final page = _pageController.page ?? 0.0;
                               final threshold = displayTotalPages - 1;
                               if (page > threshold) {
-                                opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
+                                opacity = (1.0 - (page - threshold)).clamp(
+                                  0.0,
+                                  1.0,
+                                );
                               }
                             }
-                            return Opacity(
-                              opacity: opacity,
-                              child: child,
-                            );
+                            return Opacity(opacity: opacity, child: child);
                           },
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -1488,8 +1494,14 @@ class _HomeScreenState extends State<HomeScreen>
                               final page = _pageController.page ?? 0.0;
                               final threshold = displayTotalPages - 1;
                               if (page > threshold) {
-                                opacity = (1.0 - (page - threshold)).clamp(0.0, 1.0);
-                                offsetMultiplier = (page - threshold).clamp(0.0, 1.0);
+                                opacity = (1.0 - (page - threshold)).clamp(
+                                  0.0,
+                                  1.0,
+                                );
+                                offsetMultiplier = (page - threshold).clamp(
+                                  0.0,
+                                  1.0,
+                                );
                               }
                             }
                             return Transform.translate(

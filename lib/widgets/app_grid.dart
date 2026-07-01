@@ -301,24 +301,35 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
           final isBeingDragged = widget.activeDragInfo?.item.id == item.id;
 
           Widget childWidget;
+          Widget feedbackWidget;
           if (item is AppGridItem) {
             childWidget = AppIcon(app: item.app);
+            feedbackWidget = childWidget;
           } else {
             final widgetId = (item as WidgetGridItem).widgetId;
             if (widgetId == 'clock') {
               childWidget = const ClockWidget();
+              feedbackWidget = const ClockWidget(isFeedback: true);
             } else if (widgetId == 'weather') {
               childWidget = const WeatherWidget();
+              feedbackWidget = const WeatherWidget(isFeedback: true);
             } else {
               childWidget = const BatteryWidget();
+              feedbackWidget = const BatteryWidget(isFeedback: true);
             }
           }
+
+          childWidget = Container(
+            color: Colors.transparent,
+            child: childWidget,
+          );
 
           final currentChild = widget.isContextMenuOpen
               ? Opacity(
                   opacity: isBeingDragged ? 0.0 : 1.0,
                   child: Builder(
                     builder: (context) => GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: widget.isEditingMode
                           ? () {}
                           : () {
@@ -336,6 +347,7 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
                   ),
                 )
               : Listener(
+                  behavior: HitTestBehavior.opaque,
                   onPointerDown: (event) {
                     _currentPointerPosition = event.position;
                     _activePointerId = event.pointer;
@@ -361,7 +373,7 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
                           child: SizedBox(
                             width: width,
                             height: height,
-                            child: childWidget,
+                            child: feedbackWidget,
                           ),
                         ),
                       ),
@@ -397,6 +409,7 @@ class _AppGridPageState extends State<_AppGridPage> with AutomaticKeepAliveClien
                       opacity: isBeingDragged ? 0.0 : 1.0,
                       child: Builder(
                         builder: (context) => GestureDetector(
+                          behavior: HitTestBehavior.opaque,
                           onTap: widget.isEditingMode
                               ? () {}
                               : () {

@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'liquid_glass_container.dart';
 
 class BatteryWidget extends StatefulWidget {
-  const BatteryWidget({super.key});
+  final bool isFeedback;
+  const BatteryWidget({super.key, this.isFeedback = false});
 
   @override
   State<BatteryWidget> createState() => _BatteryWidgetState();
@@ -48,6 +49,7 @@ class _BatteryWidgetState extends State<BatteryWidget> {
     final isCharging = _batteryLevel < 100;
 
     return AnimatedLiquidGlassContainer(
+      isFeedback: widget.isFeedback,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

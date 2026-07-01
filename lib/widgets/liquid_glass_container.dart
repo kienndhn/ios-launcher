@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
@@ -27,6 +28,8 @@ class LiquidGlassContainer extends StatelessWidget {
   /// Background blur radius (0 = no blur).
   final double blur;
 
+  final bool isFeedback;
+
   const LiquidGlassContainer({
     super.key,
     required this.child,
@@ -35,6 +38,7 @@ class LiquidGlassContainer extends StatelessWidget {
     this.glassColor,
     this.thickness = 12,
     this.blur = 6,
+    this.isFeedback = false,
   });
 
   @override
@@ -43,6 +47,23 @@ class LiquidGlassContainer extends StatelessWidget {
     final effectiveGlassColor =
         glassColor ??
         (isDarkMode ? const Color(0x0EFFFFFF) : const Color(0x0AFFFFFF));
+
+    if (isFeedback) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(borderRadius),
+              border: Border.all(color: Colors.white.withOpacity(0.3), width: 0.5),
+            ),
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
+      );
+    }
 
     return LiquidGlass.withOwnLayer(
       settings: LiquidGlassSettings(
@@ -69,6 +90,7 @@ class AnimatedLiquidGlassContainer extends StatelessWidget {
   final Color? glassColor;
   final double thickness;
   final double blur;
+  final bool isFeedback;
 
   const AnimatedLiquidGlassContainer({
     super.key,
@@ -78,6 +100,7 @@ class AnimatedLiquidGlassContainer extends StatelessWidget {
     this.glassColor,
     this.thickness = 18,
     this.blur = 10,
+    this.isFeedback = false,
   });
 
   @override
@@ -90,6 +113,7 @@ class AnimatedLiquidGlassContainer extends StatelessWidget {
       glassColor: glassColor,
       thickness: thickness,
       blur: blur,
+      isFeedback: isFeedback,
       child: child,
     );
   }
@@ -99,7 +123,8 @@ class AnimatedLiquidGlassContainer extends StatelessWidget {
 // It is a no-op now that the real package handles rendering.
 class LiquidGlassHighlightPainter extends CustomPainter {
   final Color color;
-  const LiquidGlassHighlightPainter({required this.color});
+  final int blur;
+  const LiquidGlassHighlightPainter({required this.color, this.blur = 10});
 
   @override
   void paint(Canvas canvas, Size size) {}

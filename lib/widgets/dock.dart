@@ -80,37 +80,10 @@ class _DockState extends State<Dock> {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.12),
-                  width: 0.8,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: 18,
-                    sigmaY: 18,
-                  ),
-                  child: Container(color: Colors.transparent),
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: CustomPaint(
-                  painter: LiquidGlassHighlightPainter(
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+            child: LiquidGlassContainer(
+              borderRadius: 30,
+              padding: EdgeInsets.zero,
+              child: const SizedBox.expand(),
             ),
           ),
           Positioned.fill(
@@ -121,123 +94,147 @@ class _DockState extends State<Dock> {
                 return true;
               },
               onMove: (details) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
+                final RenderBox renderBox =
+                    context.findRenderObject() as RenderBox;
                 final localOffset = renderBox.globalToLocal(details.offset);
                 final width = renderBox.size.width;
                 final dropZoneWidth = width / 4;
-                int index = (localOffset.dx / dropZoneWidth).floor().clamp(0, widget.apps.length);
+                int index = (localOffset.dx / dropZoneWidth).floor().clamp(
+                  0,
+                  widget.apps.length,
+                );
                 widget.onDockHover(details.data, index);
               },
               onLeave: (data) {
                 widget.onDockLeave();
               },
               onAcceptWithDetails: (details) {
-                final RenderBox renderBox = context.findRenderObject() as RenderBox;
+                final RenderBox renderBox =
+                    context.findRenderObject() as RenderBox;
                 final localOffset = renderBox.globalToLocal(details.offset);
                 final width = renderBox.size.width;
                 final dropZoneWidth = width / 4;
-                int index = (localOffset.dx / dropZoneWidth).floor().clamp(0, widget.apps.length);
+                int index = (localOffset.dx / dropZoneWidth).floor().clamp(
+                  0,
+                  widget.apps.length,
+                );
                 widget.onDockDrop(details.data, index);
               },
               builder: (context, candidateData, rejectedData) {
                 return Opacity(
                   opacity: widget.opacity,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth;
-                      final isDisplacing = widget.apps.length > 4;
-                      final n = isDisplacing ? 4 : widget.apps.length;
-                      final gap = n == 0 ? 0.0 : (width - n * 60) / (n + 1);
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final isDisplacing = widget.apps.length > 4;
+                        final n = isDisplacing ? 4 : widget.apps.length;
+                        final gap = n == 0 ? 0.0 : (width - n * 60) / (n + 1);
 
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: widget.apps.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final app = entry.value;
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: widget.apps.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final app = entry.value;
 
-                          int visualIndex = index;
-                          bool isDisplaced = false;
+                            int visualIndex = index;
+                            bool isDisplaced = false;
 
-                          if (isDisplacing && index == widget.apps.length - 1) {
-                            isDisplaced = true;
-                            visualIndex = 3;
-                          }
+                            if (isDisplacing &&
+                                index == widget.apps.length - 1) {
+                              isDisplaced = true;
+                              visualIndex = 3;
+                            }
 
-                          final left = (visualIndex + 1) * gap + visualIndex * 60;
-                          double top = 0;
-                          double opacity = 1.0;
-                          final bool isBeingDragged = widget.activeDragInfo != null && widget.activeDragInfo!.item.id == app.packageName;
+                            final left =
+                                (visualIndex + 1) * gap + visualIndex * 60;
+                            double top = 0;
+                            double opacity = 1.0;
+                            final bool isBeingDragged =
+                                widget.activeDragInfo != null &&
+                                widget.activeDragInfo!.item.id ==
+                                    app.packageName;
 
-                          if (isDisplaced) {
-                            top = -120;
-                            opacity = 0.0;
-                          }
+                            if (isDisplaced) {
+                              top = -120;
+                              opacity = 0.0;
+                            }
 
-                          final Offset? tempOffset = _tempDropPositions[app.packageName];
-                          final double finalLeft = tempOffset != null ? tempOffset.dx : left;
-                          final double finalTop = tempOffset != null ? tempOffset.dy : top;
-                          final Duration animationDuration = tempOffset != null ? Duration.zero : const Duration(milliseconds: 350);
+                            final Offset? tempOffset =
+                                _tempDropPositions[app.packageName];
+                            final double finalLeft = tempOffset != null
+                                ? tempOffset.dx
+                                : left;
+                            final double finalTop = tempOffset != null
+                                ? tempOffset.dy
+                                : top;
+                            final Duration animationDuration =
+                                tempOffset != null
+                                ? Duration.zero
+                                : const Duration(milliseconds: 350);
 
-                          if (tempOffset != null) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                setState(() {
-                                  _tempDropPositions.remove(app.packageName);
-                                });
-                              }
-                            });
-                          }
+                            if (tempOffset != null) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() {
+                                    _tempDropPositions.remove(app.packageName);
+                                  });
+                                }
+                              });
+                            }
 
-                          if (app.packageName == 'dock_dummy') {
+                            if (app.packageName == 'dock_dummy') {
+                              return AnimatedPositioned(
+                                key: const ValueKey('dock_dummy'),
+                                duration: animationDuration,
+                                curve: Curves.easeOutCubic,
+                                left: finalLeft,
+                                top: finalTop,
+                                bottom: -finalTop,
+                                width: 60,
+                                child: const SizedBox(width: 60, height: 60),
+                              );
+                            }
+
                             return AnimatedPositioned(
-                              key: const ValueKey('dock_dummy'),
+                              key: ValueKey(app.packageName),
                               duration: animationDuration,
                               curve: Curves.easeOutCubic,
                               left: finalLeft,
                               top: finalTop,
                               bottom: -finalTop,
                               width: 60,
-                              child: const SizedBox(width: 60, height: 60),
-                            );
-                          }
-
-                          return AnimatedPositioned(
-                            key: ValueKey(app.packageName),
-                            duration: animationDuration,
-                            curve: Curves.easeOutCubic,
-                            left: finalLeft,
-                            top: finalTop,
-                            bottom: -finalTop,
-                            width: 60,
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 250),
-                              opacity: opacity,
-                              child: Center(
-                                child: DockAppGestureDetector(
-                                  app: app,
-                                  index: index,
-                                  onAppTap: widget.onAppTap,
-                                  isEditingMode: widget.isEditingMode,
-                                  popupDelay: widget.popupDelay,
-                                  dragDelay: widget.dragDelay,
-                                  onAppLongPress: widget.onAppLongPress,
-                                  onAppDeleteTap: widget.onAppDeleteTap,
-                                  onDockDragStarted: widget.onDockDragStarted,
-                                  onDockDragEnded: widget.onDockDragEnded,
-                                  isBeingDragged: isBeingDragged,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 250),
+                                opacity: opacity,
+                                child: Center(
+                                  child: DockAppGestureDetector(
+                                    app: app,
+                                    index: index,
+                                    onAppTap: widget.onAppTap,
+                                    isEditingMode: widget.isEditingMode,
+                                    popupDelay: widget.popupDelay,
+                                    dragDelay: widget.dragDelay,
+                                    onAppLongPress: widget.onAppLongPress,
+                                    onAppDeleteTap: widget.onAppDeleteTap,
+                                    onDockDragStarted: widget.onDockDragStarted,
+                                    onDockDragEnded: widget.onDockDragEnded,
+                                    isBeingDragged: isBeingDragged,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
             ),
           ),
         ],
@@ -300,10 +297,7 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
     Widget childWidget = SizedBox(
       width: 60,
       height: 60,
-      child: AppIcon(
-        app: widget.app,
-        showLabel: false,
-      ),
+      child: AppIcon(app: widget.app, showLabel: false),
     );
 
     Widget content = Listener(
@@ -322,16 +316,10 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
           type: MaterialType.transparency,
           child: Transform.rotate(
             angle: 0.05,
-            child: Transform.scale(
-              scale: 1.1,
-              child: childWidget,
-            ),
+            child: Transform.scale(scale: 1.1, child: childWidget),
           ),
         ),
-        childWhenDragging: const SizedBox(
-          width: 60,
-          height: 60,
-        ),
+        childWhenDragging: const SizedBox(width: 60, height: 60),
         onDragStarted: () {
           widget.onDockDragStarted(dragInfo);
           if (!widget.isEditingMode) {
@@ -342,7 +330,12 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
                 GestureBinding.instance.cancelPointer(_activePointerId!);
                 _activePointerId = null;
               }
-              widget.onAppLongPress(context, _currentPointerPosition, widget.app, -1);
+              widget.onAppLongPress(
+                context,
+                _currentPointerPosition,
+                widget.app,
+                -1,
+              );
             });
           }
         },
@@ -365,7 +358,8 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
               onTap: widget.isEditingMode
                   ? () {}
                   : () {
-                      final renderBox = context.findRenderObject() as RenderBox?;
+                      final renderBox =
+                          context.findRenderObject() as RenderBox?;
                       if (renderBox != null) {
                         final pos = renderBox.localToGlobal(Offset.zero);
                         final size = renderBox.size;
@@ -412,9 +406,6 @@ class _DockAppGestureDetectorState extends State<DockAppGestureDetector> {
       ),
     );
 
-    return WiggleWrapper(
-      isWiggling: widget.isEditingMode,
-      child: content,
-    );
+    return WiggleWrapper(isWiggling: widget.isEditingMode, child: content);
   }
 }
