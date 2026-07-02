@@ -246,15 +246,38 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadApps() async {
     try {
+      // 1. Load custom iOS icons JSON (Mapped by PackageName / Bundle ID)
+      Map<String, dynamic> customIcons = {};
+      try {
+        final jsonStr = await rootBundle.loadString('assets/icons/custom_icons.json');
+        customIcons = jsonDecode(jsonStr);
+      } catch (e) {
+        print("Failed to load custom icons: $e");
+      }
+
+      // 2. Fetch installed apps
       final List<dynamic> result = await platform.invokeMethod(
         'getInstalledApps',
       );
       final List<AppInfo> loaded = result.map((app) {
         final map = app as Map<dynamic, dynamic>;
+        final packageName = map['packageName'] as String;
+        final label = map['label'] as String;
+        Uint8List iconBytes = map['icon'] as Uint8List;
+        
+        // 3. Inject custom icon if packageName matches
+        if (customIcons.containsKey(packageName)) {
+          try {
+            iconBytes = base64Decode(customIcons[packageName] as String);
+          } catch (e) {
+            print("Failed to decode custom icon for $packageName: $e");
+          }
+        }
+
         return AppInfo(
-          packageName: map['packageName'] as String,
-          label: map['label'] as String,
-          icon: map['icon'] as Uint8List,
+          packageName: packageName,
+          label: label,
+          icon: iconBytes,
         );
       }).toList();
 
